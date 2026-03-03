@@ -1,0 +1,26 @@
+services:
+
+  dns:
+    platform: linux/amd64
+    image: jpillora/dnsmasq
+    container_name: dns
+    restart: always
+    ports:
+      - "53:53/udp"   # DNS UDP
+      - "53:53/tcp"   # DNS TCP
+      - "8080:8080"   # Web UI logs dnsmasq
+    volumes:
+      - ./dnsmasq.conf:/etc/dnsmasq.conf:ro   # générer via setup-dns.sh avant de démarrer
+      - dns_logs:/var/log/dnsmasq
+    environment:
+      HTTP_USER: admin
+      HTTP_PASS: admin
+    cap_add:
+      - NET_ADMIN
+
+volumes:
+  dns_logs:
+
+networks:
+  default:
+    name: dns-network

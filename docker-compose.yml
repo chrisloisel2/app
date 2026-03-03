@@ -1,0 +1,60 @@
+services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # PHYSICAL DATA — backend · frontend
+  #
+  # Services externes (déjà déployés sur le réseau) :
+  #   NAS      : 192.168.88.248:22   (SFTP/SSH, user: EXORIA)
+  #   Kafka    : 192.168.88.4:9092   (topic1)
+  #   MongoDB  : 192.168.88.17:27017 (admin/admin123)
+  #   RabbitMQ : service externe
+  #   DNS      : service externe
+  #
+  # Avant de démarrer, monter le NAS :
+  #   sudo mount -t nfs 192.168.88.248:/volume1/DB-EXORIA/lakehouse/bronze/raw /mnt/nas/sessions
+  # ════════════════════════════════════════════════════════════════════════════
+  backend:
+    platform: linux/amd64
+    build:
+      context: ./backend
+    container_name: physical_data_backend
+    restart: always
+    ports:
+      - "25000:5000"
+    environment:
+      NAS_SESSIONS_DIR: /nas/sessions
+      NAS_HOST: "192.168.88.248"
+      NAS_PORT: "22"
+      NAS_USER: "EXORIA"
+      NAS_PASS: "${NAS_PASS}"
+      KAFKA_BROKER: "192.168.88.4"
+      KAFKA_BROKER_PORT: "9092"
+      KAFKA_TOPIC: "topic1"
+      MONGODB_URI: "mongodb://admin:admin123@192.168.88.17:27017/"
+      CORS_ALLOWED_ORIGINS: "*"
+    volumes:
+      - /mnt/nas/sessions:/nas/sessions:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    platform: linux/amd64
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:25000
+    container_name: physical_data_frontend
+    restart: always
+    ports:
+      - "23000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+networks:
+  default:
+    name: physical-data-network

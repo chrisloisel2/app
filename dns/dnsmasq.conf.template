@@ -1,0 +1,51 @@
+# =============================================================================
+# Configuration dnsmasq — DNS local pour le réseau LAN
+# Fichier généré automatiquement par setup-dns.sh — ne pas éditer directement
+# =============================================================================
+
+# --- Paramètres généraux ---
+no-resolv
+listen-address=0.0.0.0
+port=53
+domain-needed
+bogus-priv
+
+# --- DNS upstream ---
+server=8.8.8.8
+server=8.8.4.4
+server=1.1.1.1
+
+# --- Domaine local ---
+local=/lan/
+domain=lan
+
+# =============================================================================
+# Enregistrements A — Serveur principal
+# =============================================================================
+
+# "server" pointe vers ce serveur (IP auto-détectée)
+address=/server/SERVER_IP
+address=/server.lan/SERVER_IP
+
+# Alias pratiques
+address=/hadoop.lan/SERVER_IP
+address=/hive.lan/SERVER_IP
+address=/kafka.lan/SERVER_IP
+
+# =============================================================================
+# Machines sur le switch — À compléter selon votre réseau
+# =============================================================================
+# Syntaxe : address=/nom-machine/IP
+#
+# Exemple :
+# address=/switch/192.168.30.1
+# address=/pc-alice/192.168.30.20
+# address=/pc-bob/192.168.30.21
+# address=/nas/192.168.30.50
+
+# =============================================================================
+# Cache et logs
+# =============================================================================
+cache-size=1000
+log-queries
+log-facility=/var/log/dnsmasq/dnsmasq.log
