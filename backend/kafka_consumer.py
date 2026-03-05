@@ -77,6 +77,8 @@ _state = {
     "connected": False,
     "errors": [],
 }
+# pc_id (int) -> True si le PC a été vu au moins une fois depuis le démarrage
+_pc_ever_seen: set = set()
 _state_lock = threading.Lock()
 _consumer_thread = None
 
@@ -99,7 +101,20 @@ def _process_message(raw_value: bytes):
         if source == "pc":
             pc_id = int(msg.get("pc_id", 0))
             if 1 <= pc_id <= 30:
-                _state["pcs"][pc_id] = msg
+                _pc_ever_seen.add(pc_id)
+                if msg.get("disconnected"):
+                    # Message explicite de déconnexion : on marque _disconnected
+                    # mais on conserve le hostname et les dernières infos connues
+                    prev = _state["pcs"].get(pc_id, {})
+                    _state["pcs"][pc_id] = {
+                        **prev,
+                        "pc_id": pc_id,
+                        "hostname": msg.get("hostname", prev.get("hostname", f"PC-{pc_id:05d}")),
+                        "timestamp": msg.get("timestamp"),
+                        "_disconnected": True,
+                    }
+                else:
+                    _state["pcs"][pc_id] = {**msg, "_disconnected": False}
         elif source == "spool":
             _state["spool"] = msg
         elif source == "nas":
@@ -169,16 +184,30 @@ def get_state_snapshot() -> dict:
         for pc_id in range(1, 31):
             data = _state["pcs"].get(pc_id)
             if data:
+                # PC déjà vu : on transmet tel quel (_disconnected peut être True/False)
                 pcs.append(data)
-            else:
+            elif pc_id in _pc_ever_seen:
+                # Ne devrait pas arriver (on stocke toujours dans _state["pcs"] dès la 1ère vue)
+                # mais par sécurité : PC vu mais données absentes = déconnecté
                 pcs.append({
                     "source": "pc",
                     "pc_id": pc_id,
-                    "hostname": f"pc-{pc_id:02d}",
+                    "hostname": f"PC-{pc_id:05d}",
                     "timestamp": None,
                     "sqlite_queue": None,
                     "last_send": None,
-                    "_offline": True,
+                    "_disconnected": True,
+                })
+            else:
+                # Jamais vu depuis le démarrage du backend
+                pcs.append({
+                    "source": "pc",
+                    "pc_id": pc_id,
+                    "hostname": f"PC-{pc_id:05d}",
+                    "timestamp": None,
+                    "sqlite_queue": None,
+                    "last_send": None,
+                    "_never_seen": True,
                 })
         return {
             "connected": _state["connected"],

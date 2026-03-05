@@ -43,7 +43,7 @@ Chaque poste publie périodiquement un message JSON sur `topic2`.
 |---|---|---|---|
 | `source` | `"pc"` | ✅ | Discriminant source |
 | `pc_id` | integer 1–30 | ✅ | Identifiant unique du poste |
-| `hostname` | string | ✅ | Nom réseau du poste (ex: `"pc-01"`) |
+| `hostname` | string | ✅ | Nom réseau du poste (ex: `"PC-00018"` pour le poste 18) |
 | `timestamp` | ISO 8601 UTC | ✅ | Horodatage d'émission du message |
 | `sqlite_queue.pending_sessions` | integer | ✅ | Nombre de sessions en attente d'envoi |
 | `sqlite_queue.total_records` | integer | ✅ | Total enregistrements en file |
@@ -56,16 +56,35 @@ Chaque poste publie périodiquement un message JSON sur `topic2`.
 | `last_send.sent_at` | ISO 8601 UTC | ✅ | Heure d'envoi |
 | `last_send.status` | `"success"` \| `"failed"` \| `"in_progress"` | ✅ | Résultat de l'envoi |
 | `last_send.records_sent` | integer | ✅ | Nombre d'enregistrements transmis |
+| `disconnected` | boolean | ⬜ | `true` = message explicite de déconnexion (voir ci-dessous) |
+
+### Message de déconnexion
+
+Pour signaler qu'un PC se déconnecte proprement, envoyer :
+
+```json
+{
+  "source": "pc",
+  "pc_id": 5,
+  "hostname": "PC-00005",
+  "timestamp": "2026-03-05T18:00:00Z",
+  "disconnected": true
+}
+```
+
+Le backend conserve les dernières données connues du poste et le marque comme déconnecté.
 
 ### Statuts de poste (affichage blueprint)
 
 | Statut | Couleur | Condition |
 |---|---|---|
-| `active` | Vert | Connecté, aucune session en attente |
+| `active` | Vert | Vu au moins une fois, aucune session en attente |
 | `sending` | Ambre | `last_send.status == "in_progress"` |
 | `queued` | Violet | `sqlite_queue.pending_sessions > 0` |
-| `offline` | Gris | Aucun message reçu |
-| `error` | Rouge | `last_send.status == "failed"` |
+| `disconnected` | Rouge pâle | Message `disconnected: true` reçu |
+| `never_seen` | Gris foncé | Jamais reçu de message depuis ce PC |
+
+> **Important :** un PC est considéré **connecté** dès qu'il a envoyé au moins un message, et reste dans cet état tant qu'aucun message `disconnected: true` n'est reçu. Il n'y a pas de timeout automatique.
 
 ---
 

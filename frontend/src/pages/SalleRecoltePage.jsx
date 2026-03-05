@@ -3,17 +3,23 @@ import { fetchSalleRecolte } from "../api/client";
 
 // ── Couleurs de statut ────────────────────────────────────────────────────────
 const STATUS_COLOR = {
-  online:      { ring: "#22d3ee", glow: "rgba(34,211,238,0.35)", label: "#22d3ee" },
-  active:      { ring: "#22c55e", glow: "rgba(34,197,94,0.35)",  label: "#22c55e" },
-  sending:     { ring: "#f59e0b", glow: "rgba(245,158,11,0.35)", label: "#f59e0b" },
-  queued:      { ring: "#6366f1", glow: "rgba(99,102,241,0.35)", label: "#6366f1" },
-  offline:     { ring: "#374151", glow: "rgba(55,65,81,0.15)",   label: "#6b7280" },
-  error:       { ring: "#ef4444", glow: "rgba(239,68,68,0.35)",  label: "#ef4444" },
-  degraded:    { ring: "#f97316", glow: "rgba(249,115,22,0.35)", label: "#f97316" },
+  online:       { ring: "#22d3ee", glow: "rgba(34,211,238,0.35)", label: "#22d3ee" },
+  active:       { ring: "#22c55e", glow: "rgba(34,197,94,0.35)",  label: "#22c55e" },
+  sending:      { ring: "#f59e0b", glow: "rgba(245,158,11,0.35)", label: "#f59e0b" },
+  queued:       { ring: "#6366f1", glow: "rgba(99,102,241,0.35)", label: "#6366f1" },
+  disconnected: { ring: "#dc2626", glow: "rgba(220,38,38,0.25)",  label: "#f87171" },
+  never_seen:   { ring: "#1f2937", glow: "rgba(31,41,55,0.10)",   label: "#374151" },
+  error:        { ring: "#ef4444", glow: "rgba(239,68,68,0.35)",  label: "#ef4444" },
+  degraded:     { ring: "#f97316", glow: "rgba(249,115,22,0.35)", label: "#f97316" },
+  offline:      { ring: "#374151", glow: "rgba(55,65,81,0.15)",   label: "#6b7280" },
 };
 
+// Un PC est "offline" seulement si un message explicite "disconnected: true" est reçu.
+// S'il n'a jamais été vu → "never_seen" (case grisée vide).
+// S'il a été vu au moins une fois sans message de déconnexion → connecté (actif / envoi / file).
 function pcStatus(pc) {
-  if (pc._offline) return "offline";
+  if (pc._never_seen)   return "never_seen";
+  if (pc._disconnected) return "disconnected";
   const send = pc.last_send?.status;
   if (send === "in_progress") return "sending";
   const q = pc.sqlite_queue?.pending_sessions ?? 0;
@@ -43,7 +49,7 @@ function PcBox({ pc, selected, onClick }) {
   return (
     <div
       onClick={onClick}
-      title={`${pc.hostname || `pc-${String(pc.pc_id).padStart(2,"0")}`}`}
+      title={`${pc.hostname || `PC-${String(pc.pc_id).padStart(5,"0")}`}`}
       style={{
         border: `1.5px solid ${selected ? "#93c5fd" : c.ring}`,
         boxShadow: selected
@@ -62,8 +68,8 @@ function PcBox({ pc, selected, onClick }) {
       }}
     >
       {/* PC ID */}
-      <span style={{ color: c.label, fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>
-        {String(pc.pc_id).padStart(2, "0")}
+      <span style={{ color: c.label, fontSize: 8, fontWeight: 700, letterSpacing: 0 }}>
+        {String(pc.pc_id).padStart(5, "0")}
       </span>
 
       {/* Monitor icon */}
@@ -131,7 +137,7 @@ function PcDetailPanel({ pc, onClose }) {
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <span style={{ color: c.label, fontWeight: 700, fontSize: 14 }}>
-          {pc.hostname || `pc-${String(pc.pc_id).padStart(2, "0")}`}
+          {pc.hostname || `PC-${String(pc.pc_id).padStart(5, "0")}`}
         </span>
         <button
           onClick={onClose}
@@ -142,6 +148,17 @@ function PcDetailPanel({ pc, onClose }) {
       <Row label="ID" value={`PC-${String(pc.pc_id).padStart(2, "0")}`} />
       <Row label="Statut" value={st.toUpperCase()} color={c.label} />
       <Row label="Vu le" value={pc.timestamp ? new Date(pc.timestamp).toLocaleString("fr-FR") : "—"} />
+
+      {pc._disconnected && (
+        <div style={{
+          background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)",
+          borderRadius: 5, padding: "6px 10px", marginTop: 8,
+        }}>
+          <p style={{ color: "#f87171", fontSize: 10, margin: 0 }}>
+            Message de déconnexion reçu. Les dernières données connues sont affichées.
+          </p>
+        </div>
+      )}
 
       {q ? (
         <>
@@ -239,7 +256,7 @@ function SpoolCard({ spool }) {
           {spool.current_transfer && (
             <div style={{ marginTop: 8 }}>
               <p style={{ color: "#f59e0b", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Transfert en cours</p>
-              <MetaLine label={`PC-${String(spool.current_transfer.from_pc).padStart(2,"0")}`} value={`${spool.current_transfer.progress_pct}%`} color="#f59e0b" />
+              <MetaLine label={`PC-${String(spool.current_transfer.from_pc).padStart(5,"0")}`} value={`${spool.current_transfer.progress_pct}%`} color="#f59e0b" />
               <MetaLine label="Vitesse" value={`${spool.current_transfer.speed_mbps} Mb/s`} />
               <ProgressBar pct={spool.current_transfer.progress_pct} color="#f59e0b" />
             </div>
@@ -326,11 +343,11 @@ function ProgressBar({ pct, color }) {
 // ── Légende ───────────────────────────────────────────────────────────────────
 function Legend() {
   const items = [
-    { st: "active",  label: "Actif" },
-    { st: "sending", label: "Envoi en cours" },
-    { st: "queued",  label: "File en attente" },
-    { st: "offline", label: "Hors-ligne" },
-    { st: "error",   label: "Erreur" },
+    { st: "active",       label: "Actif" },
+    { st: "sending",      label: "Envoi en cours" },
+    { st: "queued",       label: "File en attente" },
+    { st: "disconnected", label: "Déconnecté" },
+    { st: "never_seen",   label: "Non enregistré" },
   ];
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -377,8 +394,8 @@ export default function SalleRecoltePage() {
 
   const pcs = data?.pcs ?? Array.from({ length: 30 }, (_, i) => ({
     source: "pc", pc_id: i + 1,
-    hostname: `pc-${String(i+1).padStart(2,"0")}`,
-    timestamp: null, sqlite_queue: null, last_send: null, _offline: true,
+    hostname: `PC-${String(i+1).padStart(5,"0")}`,
+    timestamp: null, sqlite_queue: null, last_send: null, _never_seen: true,
   }));
 
   // Compter les états
@@ -390,8 +407,23 @@ export default function SalleRecoltePage() {
 
   const selectedPcData = selectedPc !== null ? pcs.find(p => p.pc_id === selectedPc) : null;
 
-  // Layout de la grille : 3 rangées de 10
-  const rows = [pcs.slice(0, 10), pcs.slice(10, 20), pcs.slice(20, 30)];
+  // Layout serpentin 6 rangées de 5 :
+  //  →  1  2  3  4  5
+  //  →  6  7  8  9 10
+  //  ← 15 14 13 12 11
+  //  → 16 17 18 19 20
+  //  ← 25 24 23 22 21
+  //  → 26 27 28 29 30
+  const pcById = Object.fromEntries(pcs.map(p => [p.pc_id, p]));
+  const SNAKE_ORDER = [
+    [1,  2,  3,  4,  5],
+    [6,  7,  8,  9,  10],
+    [15, 14, 13, 12, 11],
+    [16, 17, 18, 19, 20],
+    [25, 24, 23, 22, 21],
+    [26, 27, 28, 29, 30],
+  ];
+  const rows = SNAKE_ORDER.map(ids => ids.map(id => pcById[id]));
 
   return (
     <div style={{
@@ -431,12 +463,12 @@ export default function SalleRecoltePage() {
       {/* Stats rapides */}
       <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
         {[
-          { label: "Actifs",           value: stats.active  ?? 0, color: "#22c55e" },
-          { label: "En envoi",         value: stats.sending ?? 0, color: "#f59e0b" },
-          { label: "File d'attente",   value: stats.queued  ?? 0, color: "#6366f1" },
-          { label: "Hors-ligne",       value: stats.offline ?? 0, color: "#4b5563" },
-          { label: "Erreur",           value: stats.error   ?? 0, color: "#ef4444" },
-          { label: "Total postes",     value: 30,                 color: "#e2e8f0" },
+          { label: "Actifs",           value: stats.active       ?? 0, color: "#22c55e" },
+          { label: "En envoi",         value: stats.sending      ?? 0, color: "#f59e0b" },
+          { label: "File d'attente",   value: stats.queued       ?? 0, color: "#6366f1" },
+          { label: "Déconnectés",      value: stats.disconnected ?? 0, color: "#f87171" },
+          { label: "Non enregistrés",  value: stats.never_seen   ?? 0, color: "#374151" },
+          { label: "Total postes",     value: 30,                      color: "#e2e8f0" },
         ].map(({ label, value, color }) => (
           <div key={label} style={{
             background: "rgba(15,23,42,0.8)", border: "1px solid rgba(255,255,255,0.06)",
@@ -514,14 +546,17 @@ export default function SalleRecoltePage() {
                 POSTES D'ENREGISTREMENT
               </p>
 
-              {rows.map((row, rowIdx) => (
+              {rows.map((row, rowIdx) => {
+                // Rangées 3 et 5 (indices 2 et 4) sont en sens inverse (←)
+                const isReversed = rowIdx === 2 || rowIdx === 4;
+                const arrow = isReversed ? "←" : "→";
+                return (
                 <div key={rowIdx} style={{ marginBottom: 12 }}>
-                  {/* Rangée label */}
                   <div style={{
                     display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
                   }}>
-                    <span style={{ color: "rgba(99,102,241,0.4)", fontSize: 8, width: 40 }}>
-                      RANGÉE {rowIdx + 1}
+                    <span style={{ color: "rgba(99,102,241,0.4)", fontSize: 8, width: 52, flexShrink: 0 }}>
+                      {arrow} R{rowIdx + 1}
                     </span>
                     {/* Table (bureau) */}
                     <div style={{
@@ -544,7 +579,8 @@ export default function SalleRecoltePage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* ── INFRASTRUCTURE (Spool + NAS) ────────────────────────────── */}
