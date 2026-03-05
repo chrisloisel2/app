@@ -217,7 +217,7 @@ function PcDetailPanel({ pc, onClose }) {
       <Row label="Alerte" value={pc.has_alert ? "⚠ OUI" : "Non"}
         color={pc.has_alert ? "#ef4444" : "#4b5563"} />
       <Row label="Statut" value={st.toUpperCase()} color={c.label} />
-      <Row label="Vu le" value={pc.timestamp ? new Date(pc.timestamp).toLocaleString("fr-FR") : "—"} />
+      <Row label="Vu le" value={pc.last_seen_at ? new Date(pc.last_seen_at).toLocaleString("fr-FR") : "—"} />
 
       {pc._disconnected && (
         <div style={{
@@ -453,11 +453,31 @@ function pcVisualKey(pc) {
   ].join("|");
 }
 
+// ── Affichage horodatage isolé (se rafraîchit seul, ne re-render pas la page) ─
+function LastUpdateLabel({ lastUpdateRef }) {
+  const [display, setDisplay] = useState("—");
+  useEffect(() => {
+    const tick = () => {
+      const ts = lastUpdateRef.current;
+      setDisplay(ts ? new Date(ts).toLocaleTimeString("fr-FR") : "—");
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lastUpdateRef]);
+
+  return (
+    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", color: "#374151", fontSize: 9 }}>
+      Dernière màj : {display}
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function SalleRecoltePage() {
   // PCs stockés par pc_id pour éviter de remplacer un objet stable
   const [pcsMap, setPcsMap]         = useState(() => new Map());
-  const [meta, setMeta]             = useState({ connected: false, last_update: null, errors: [] });
+  const [meta, setMeta]             = useState({ connected: false, errors: [] });
   const [spool, setSpool]           = useState(null);
   const [nas, setNas]               = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -465,10 +485,12 @@ export default function SalleRecoltePage() {
   const [selectedPc, setSelectedPc] = useState(null);
 
   // Garder les clés visuelles précédentes pour comparaison
-  const prevKeysRef  = useRef({});
-  const prevSpoolRef = useRef(null);
-  const prevNasRef   = useRef(null);
-  const prevMetaRef  = useRef(null);
+  const prevKeysRef   = useRef({});
+  const prevSpoolRef  = useRef(null);
+  const prevNasRef    = useRef(null);
+  const prevMetaRef   = useRef(null);
+  // last_update mis à jour sans re-render (change à chaque message Kafka)
+  const lastUpdateRef = useRef(null);
 
   // Callback stable pour les clics PcBox (ne change jamais de référence)
   const handlePcClick = useCallback((pcId) => {
@@ -480,25 +502,33 @@ export default function SalleRecoltePage() {
     setLoading(prev => prev ? false : prev);
     setError(prev => prev ? null : prev);
 
-    // ── Meta (connected, last_update, errors) — seulement si changé ──
-    const metaKey = `${msg.connected}|${msg.last_update}|${(msg.errors ?? []).length}`;
+    // ── Meta : exclure last_update du diff (change à chaque message Kafka) ──
+    // last_update est stocké dans le ref pour être affiché sans causer de re-render
+    const metaKey = `${msg.connected}|${(msg.errors ?? []).length}`;
+    lastUpdateRef.current = msg.last_update;
     if (metaKey !== prevMetaRef.current) {
       prevMetaRef.current = metaKey;
-      setMeta({ connected: msg.connected, last_update: msg.last_update, errors: msg.errors ?? [] });
+      setMeta({ connected: msg.connected, errors: msg.errors ?? [] });
     }
 
-    // ── Spool : mise à jour seulement si changé ──
-    const spoolKey = JSON.stringify(msg.spool ?? null);
+    // ── Spool : clé structurée sur les champs visuels uniquement ──
+    const sp = msg.spool;
+    const spoolKey = sp
+      ? `${sp.inbound_queue?.length ?? 0}|${sp.processed_today ?? ""}|${sp.forwarded_to_nas ?? ""}|${sp.failed ?? 0}|${sp.current_transfer?.session_id ?? ""}|${sp.current_transfer?.progress_pct ?? ""}`
+      : "null";
     if (spoolKey !== prevSpoolRef.current) {
       prevSpoolRef.current = spoolKey;
-      setSpool(msg.spool ?? null);
+      setSpool(sp ?? null);
     }
 
-    // ── NAS : mise à jour seulement si changé ──
-    const nasKey = JSON.stringify(msg.nas ?? null);
+    // ── NAS : clé structurée sur les champs visuels uniquement ──
+    const n = msg.nas;
+    const nasKey = n
+      ? `${n.status ?? ""}|${n.total_sessions ?? ""}|${n.disk_used_gb ?? ""}|${n.last_write?.session_id ?? ""}`
+      : "null";
     if (nasKey !== prevNasRef.current) {
       prevNasRef.current = nasKey;
-      setNas(msg.nas ?? null);
+      setNas(n ?? null);
     }
 
     // ── PCs : ne remplacer que ceux qui ont changé ──
@@ -636,14 +666,7 @@ export default function SalleRecoltePage() {
             <span style={{ color: "#4b5563", fontSize: 9, textTransform: "uppercase", letterSpacing: 1, marginTop: 2 }}>{label}</span>
           </div>
         ))}
-        {meta.last_update && (
-          <div style={{
-            marginLeft: "auto", display: "flex", alignItems: "center",
-            color: "#374151", fontSize: 9,
-          }}>
-            Dernière màj : {new Date(meta.last_update).toLocaleTimeString("fr-FR")}
-          </div>
-        )}
+        <LastUpdateLabel lastUpdateRef={lastUpdateRef} />
       </div>
 
       {/* Zone principale : blueprint + panneau détail */}
