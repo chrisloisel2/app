@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback, memo } from "react";
 
 // ── Couleurs de statut ────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -39,7 +39,7 @@ function spoolStatus(spool) {
 }
 
 // ── PC Box ────────────────────────────────────────────────────────────────────
-function PcBox({ pc, selected, onClick }) {
+const PcBox = memo(function PcBox({ pc, selected, onClick }) {
   const st = pcStatus(pc);
   const c = STATUS_COLOR[st];
   const queue        = pc.sqlite_queue?.pending_sessions ?? null;
@@ -174,7 +174,7 @@ function PcBox({ pc, selected, onClick }) {
       }} />
     </div>
   );
-}
+});
 
 // ── Panel de détail PC ────────────────────────────────────────────────────────
 function PcDetailPanel({ pc, onClose }) {
@@ -437,39 +437,91 @@ function Legend() {
   );
 }
 
+// ── Champs visuels qui déclenchent un re-render si changés ───────────────────
+function pcVisualKey(pc) {
+  return [
+    pc._never_seen ? "n" : pc._disconnected ? "d" : "c",
+    pc.operator_username ?? "",
+    pc.is_recording ? 1 : 0,
+    pc.has_alert ? 1 : 0,
+    pc.sqlite_queue?.pending_sessions ?? 0,
+    pc.last_send?.status ?? "",
+  ].join("|");
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function SalleRecoltePage() {
-  const [data, setData]             = useState(null);
+  // PCs stockés par pc_id pour éviter de remplacer un objet stable
+  const [pcsMap, setPcsMap]         = useState(() => new Map());
+  const [meta, setMeta]             = useState({ connected: false, last_update: null, errors: [] });
+  const [spool, setSpool]           = useState(null);
+  const [nas, setNas]               = useState(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [selectedPc, setSelectedPc] = useState(null);
 
-  useEffect(() => {
-    const es = new EventSource("/api/salle/stream");
+  // Garder les clés visuelles précédentes pour comparaison
+  const prevKeysRef = useRef({});
+  const prevSpoolRef = useRef(null);
+  const prevNasRef = useRef(null);
 
-    es.onmessage = (e) => {
-      try {
-        setData(JSON.parse(e.data));
-        setError(null);
-        setLoading(false);
-      } catch {
-        // ignore malformed frame
+  const handleMessage = useCallback((raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    // ── Meta (connected, last_update, errors) ──
+    setMeta({ connected: msg.connected, last_update: msg.last_update, errors: msg.errors ?? [] });
+    setLoading(false);
+    setError(null);
+
+    // ── Spool : mise à jour seulement si changé ──
+    const spoolKey = JSON.stringify(msg.spool ?? null);
+    if (spoolKey !== prevSpoolRef.current) {
+      prevSpoolRef.current = spoolKey;
+      setSpool(msg.spool ?? null);
+    }
+
+    // ── NAS : mise à jour seulement si changé ──
+    const nasKey = JSON.stringify(msg.nas ?? null);
+    if (nasKey !== prevNasRef.current) {
+      prevNasRef.current = nasKey;
+      setNas(msg.nas ?? null);
+    }
+
+    // ── PCs : ne remplacer que ceux qui ont changé ──
+    const incoming = msg.pcs ?? [];
+    const changed = [];
+    for (const pc of incoming) {
+      const key = pcVisualKey(pc);
+      if (prevKeysRef.current[pc.pc_id] !== key) {
+        prevKeysRef.current[pc.pc_id] = key;
+        changed.push(pc);
       }
-    };
-
-    es.onerror = () => {
-      setError("Connexion SSE perdue — reconnexion…");
-      // EventSource reconnects automatically
-    };
-
-    return () => es.close();
+    }
+    if (changed.length > 0) {
+      setPcsMap(prev => {
+        const next = new Map(prev);
+        for (const pc of changed) next.set(pc.pc_id, pc);
+        return next;
+      });
+    }
   }, []);
 
-  const pcs = data?.pcs ?? Array.from({ length: 30 }, (_, i) => ({
-    source: "pc", pc_id: i + 1,
-    hostname: `PC-${String(i+1).padStart(5,"0")}`,
-    timestamp: null, sqlite_queue: null, last_send: null, _never_seen: true,
-  }));
+  useEffect(() => {
+    const es = new EventSource("/api/salle/stream");
+    es.onmessage = (e) => handleMessage(e.data);
+    es.onerror   = () => setError("Connexion SSE perdue — reconnexion…");
+    return () => es.close();
+  }, [handleMessage]);
+
+  const pcs = Array.from({ length: 30 }, (_, i) => {
+    const id = i + 1;
+    return pcsMap.get(id) ?? {
+      source: "pc", pc_id: id,
+      hostname: `PC-${String(id).padStart(5, "0")}`,
+      timestamp: null, sqlite_queue: null, last_send: null, _never_seen: true,
+    };
+  });
 
   // Compter les états
   const stats = pcs.reduce((acc, pc) => {
@@ -523,11 +575,11 @@ export default function SalleRecoltePage() {
           }}>
             <span style={{
               width: 7, height: 7, borderRadius: "50%",
-              background: data?.connected ? "#22d3ee" : "#ef4444",
-              boxShadow: data?.connected ? "0 0 5px rgba(34,211,238,0.6)" : "0 0 5px rgba(239,68,68,0.6)",
+              background: meta.connected ? "#22d3ee" : "#ef4444",
+              boxShadow: meta.connected ? "0 0 5px rgba(34,211,238,0.6)" : "0 0 5px rgba(239,68,68,0.6)",
             }} />
-            <span style={{ color: data?.connected ? "#22d3ee" : "#ef4444", fontSize: 10, fontWeight: 600 }}>
-              {data?.connected ? "KAFKA CONNECTÉ" : "KAFKA DÉCONNECTÉ"}
+            <span style={{ color: meta.connected ? "#22d3ee" : "#ef4444", fontSize: 10, fontWeight: 600 }}>
+              {meta.connected ? "KAFKA CONNECTÉ" : "KAFKA DÉCONNECTÉ"}
             </span>
           </div>
         </div>
@@ -551,12 +603,12 @@ export default function SalleRecoltePage() {
             <span style={{ color: "#4b5563", fontSize: 9, textTransform: "uppercase", letterSpacing: 1, marginTop: 2 }}>{label}</span>
           </div>
         ))}
-        {data?.last_update && (
+        {meta.last_update && (
           <div style={{
             marginLeft: "auto", display: "flex", alignItems: "center",
             color: "#374151", fontSize: 9,
           }}>
-            Dernière màj : {new Date(data.last_update).toLocaleTimeString("fr-FR")}
+            Dernière màj : {new Date(meta.last_update).toLocaleTimeString("fr-FR")}
           </div>
         )}
       </div>
@@ -674,7 +726,7 @@ export default function SalleRecoltePage() {
                   display: "flex", alignItems: "center", gap: 0, background: "rgba(15,23,42,0.5)",
                   border: "1px solid rgba(99,102,241,0.15)", borderRadius: 10, padding: "12px 16px",
                 }}>
-                  <SpoolCard spool={data?.spool ?? null} />
+                  <SpoolCard spool={spool} />
 
                   {/* Flèche Spool → NAS */}
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "0 20px", gap: 4 }}>
@@ -686,7 +738,7 @@ export default function SalleRecoltePage() {
                     <span style={{ color: "rgba(99,102,241,0.3)", fontSize: 7 }}>192.168.88.x</span>
                   </div>
 
-                  <NasCard nas={data?.nas ?? null} />
+                  <NasCard nas={nas} />
                 </div>
 
                 {/* Indicateur de flux global PC → Spool */}
@@ -711,7 +763,7 @@ export default function SalleRecoltePage() {
             </div>
 
             {/* Erreurs Kafka */}
-            {data?.errors?.length > 0 && (
+            {meta.errors?.length > 0 && (
               <div style={{
                 marginTop: 16, background: "rgba(239,68,68,0.05)",
                 border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, padding: 10,
@@ -719,7 +771,7 @@ export default function SalleRecoltePage() {
                 <p style={{ color: "#ef4444", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
                   ERREURS KAFKA
                 </p>
-                {data.errors.slice(-3).map((e, i) => (
+                {meta.errors.slice(-3).map((e, i) => (
                   <p key={i} style={{ color: "#9ca3af", fontSize: 9, margin: "2px 0" }}>
                     {new Date(e.ts).toLocaleTimeString("fr-FR")} · {e.msg}
                   </p>
@@ -727,7 +779,7 @@ export default function SalleRecoltePage() {
               </div>
             )}
 
-            {loading && !data && (
+            {loading && pcsMap.size === 0 && (
               <div style={{
                 position: "absolute", inset: 0, display: "flex",
                 alignItems: "center", justifyContent: "center",
