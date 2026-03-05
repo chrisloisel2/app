@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, memo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 
 // ── Couleurs de statut ────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -295,7 +295,7 @@ function Divider({ label }) {
 }
 
 // ── Carte Spool ───────────────────────────────────────────────────────────────
-function SpoolCard({ spool }) {
+const SpoolCard = memo(function SpoolCard({ spool }) {
   const st = spoolStatus(spool);
   const c = STATUS_COLOR[st];
   return (
@@ -337,10 +337,10 @@ function SpoolCard({ spool }) {
       )}
     </div>
   );
-}
+});
 
 // ── Carte NAS ─────────────────────────────────────────────────────────────────
-function NasCard({ nas }) {
+const NasCard = memo(function NasCard({ nas }) {
   const st = nasStatus(nas);
   const c = STATUS_COLOR[st];
   const diskPct = nas ? Math.round((nas.disk_used_gb / nas.disk_total_gb) * 100) : 0;
@@ -382,7 +382,7 @@ function NasCard({ nas }) {
       )}
     </div>
   );
-}
+});
 
 function MetaLine({ label, value, unit, color }) {
   return (
@@ -475,9 +475,10 @@ export default function SalleRecoltePage() {
     setSelectedPc(prev => prev === pcId ? null : pcId);
   }, []);
 
-  const handleMessage = useCallback((raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+  const handleMessage = useCallback((msg) => {
+    // ── Loading / error (conditionnels) ──
+    setLoading(prev => prev ? false : prev);
+    setError(prev => prev ? null : prev);
 
     // ── Meta (connected, last_update, errors) — seulement si changé ──
     const metaKey = `${msg.connected}|${msg.last_update}|${(msg.errors ?? []).length}`;
@@ -485,8 +486,6 @@ export default function SalleRecoltePage() {
       prevMetaRef.current = metaKey;
       setMeta({ connected: msg.connected, last_update: msg.last_update, errors: msg.errors ?? [] });
     }
-    setLoading(false);
-    setError(null);
 
     // ── Spool : mise à jour seulement si changé ──
     const spoolKey = JSON.stringify(msg.spool ?? null);
@@ -526,8 +525,7 @@ export default function SalleRecoltePage() {
     const poll = async () => {
       try {
         const res = await fetch("/api/salle");
-        const msg = await res.json();
-        if (active) handleMessage(JSON.stringify(msg));
+        if (active) handleMessage(await res.json());
       } catch {
         if (active) setError("Erreur de connexion…");
       }
@@ -537,21 +535,20 @@ export default function SalleRecoltePage() {
     return () => { active = false; };
   }, [handleMessage]);
 
-  const pcs = Array.from({ length: 30 }, (_, i) => {
+  const pcs = useMemo(() => Array.from({ length: 30 }, (_, i) => {
     const id = i + 1;
     return pcsMap.get(id) ?? {
       source: "pc", pc_id: id,
       hostname: `PC-${String(id).padStart(5, "0")}`,
       timestamp: null, sqlite_queue: null, last_send: null, _never_seen: true,
     };
-  });
+  }), [pcsMap]);
 
-  // Compter les états
-  const stats = pcs.reduce((acc, pc) => {
+  const stats = useMemo(() => pcs.reduce((acc, pc) => {
     const s = pcStatus(pc);
     acc[s] = (acc[s] || 0) + 1;
     return acc;
-  }, {});
+  }, {}), [pcs]);
 
   const selectedPcData = selectedPc !== null ? pcs.find(p => p.pc_id === selectedPc) : null;
 
