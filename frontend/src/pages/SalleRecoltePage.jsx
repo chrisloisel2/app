@@ -40,6 +40,7 @@ function spoolStatus(spool) {
 
 // ── PC Box ────────────────────────────────────────────────────────────────────
 const PcBox = memo(function PcBox({ pc, selected, onClick }) {
+  const handleClick = useCallback(() => onClick(pc.pc_id), [onClick, pc.pc_id]);
   const st = pcStatus(pc);
   const c = STATUS_COLOR[st];
   const queue        = pc.sqlite_queue?.pending_sessions ?? null;
@@ -64,7 +65,7 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
 
   return (
     <div
-      onClick={onClick}
+      onClick={handleClick}
       title={title}
       style={{
         border: `1.5px solid ${selected ? "#93c5fd" : borderColor}`,
@@ -445,7 +446,10 @@ function pcVisualKey(pc) {
     pc.is_recording ? 1 : 0,
     pc.has_alert ? 1 : 0,
     pc.sqlite_queue?.pending_sessions ?? 0,
+    pc.sqlite_queue?.total_records ?? 0,
     pc.last_send?.status ?? "",
+    pc.last_send?.session_id ?? "",
+    pc.last_send?.records_sent ?? 0,
   ].join("|");
 }
 
@@ -461,16 +465,26 @@ export default function SalleRecoltePage() {
   const [selectedPc, setSelectedPc] = useState(null);
 
   // Garder les clés visuelles précédentes pour comparaison
-  const prevKeysRef = useRef({});
+  const prevKeysRef  = useRef({});
   const prevSpoolRef = useRef(null);
-  const prevNasRef = useRef(null);
+  const prevNasRef   = useRef(null);
+  const prevMetaRef  = useRef(null);
+
+  // Callback stable pour les clics PcBox (ne change jamais de référence)
+  const handlePcClick = useCallback((pcId) => {
+    setSelectedPc(prev => prev === pcId ? null : pcId);
+  }, []);
 
   const handleMessage = useCallback((raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
-    // ── Meta (connected, last_update, errors) ──
-    setMeta({ connected: msg.connected, last_update: msg.last_update, errors: msg.errors ?? [] });
+    // ── Meta (connected, last_update, errors) — seulement si changé ──
+    const metaKey = `${msg.connected}|${msg.last_update}|${(msg.errors ?? []).length}`;
+    if (metaKey !== prevMetaRef.current) {
+      prevMetaRef.current = metaKey;
+      setMeta({ connected: msg.connected, last_update: msg.last_update, errors: msg.errors ?? [] });
+    }
     setLoading(false);
     setError(null);
 
@@ -698,7 +712,7 @@ export default function SalleRecoltePage() {
                           key={pc.pc_id}
                           pc={pc}
                           selected={selectedPc === pc.pc_id}
-                          onClick={() => setSelectedPc(selectedPc === pc.pc_id ? null : pc.pc_id)}
+                          onClick={handlePcClick}
                         />
                       ))}
                     </div>
