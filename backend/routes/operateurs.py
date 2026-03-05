@@ -3,23 +3,11 @@ from pymongo import MongoClient
 from bson import ObjectId
 from config import MONGODB_URI
 
-try:
-    import bcrypt
-    _HAS_BCRYPT = True
-except ImportError:
-    _HAS_BCRYPT = False
-
 operateurs_bp = Blueprint("operateurs", __name__)
 
 def get_col():
     client = MongoClient(MONGODB_URI)
     return client["physical_data"]["operators"]
-
-
-def _hash(password: str) -> str:
-    if not _HAS_BCRYPT:
-        return password
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 @operateurs_bp.route("/api/operateurs", methods=["GET"])
@@ -49,7 +37,7 @@ def create_operateur():
     result = col.insert_one({
         "numero_poste": numero_poste,
         "username":     nom_utilisateur,
-        "password":     _hash(mdp),
+        "password":     mdp,
     })
     return jsonify({"_id": str(result.inserted_id)}), 201
 
@@ -68,7 +56,7 @@ def update_operateur(id):
     if "nom_utilisateur" in body and body["nom_utilisateur"].strip():
         update["username"] = body["nom_utilisateur"].strip()
     if "mdp" in body and body["mdp"].strip():
-        update["password"] = _hash(body["mdp"].strip())
+        update["password"] = body["mdp"].strip()
 
     if not update:
         return jsonify({"error": "Aucun champ à mettre à jour"}), 400

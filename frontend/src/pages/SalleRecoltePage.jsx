@@ -43,19 +43,40 @@ function spoolStatus(spool) {
 function PcBox({ pc, selected, onClick }) {
   const st = pcStatus(pc);
   const c = STATUS_COLOR[st];
-  const queue = pc.sqlite_queue?.pending_sessions ?? null;
-  const isSending = pc.last_send?.status === "in_progress";
+  const queue        = pc.sqlite_queue?.pending_sessions ?? null;
+  const isRecording  = pc.is_recording;
+  const hasAlert     = pc.has_alert;
+  const operator     = pc.operator_username;
+
+  // Couleur de bordure : alerte > enregistrement > statut normal
+  const borderColor = hasAlert ? "#ef4444" : isRecording ? "#a855f7" : c.ring;
+  const glowColor   = hasAlert
+    ? "rgba(239,68,68,0.4)"
+    : isRecording
+    ? "rgba(168,85,247,0.4)"
+    : c.glow;
+
+  const title = [
+    pc.hostname || `PC-${String(pc.pc_id).padStart(5,"0")}`,
+    operator ? `Opérateur : ${operator}` : null,
+    isRecording ? "● Enregistrement en cours" : null,
+    hasAlert    ? "⚠ Alerte" : null,
+  ].filter(Boolean).join("\n");
 
   return (
     <div
       onClick={onClick}
-      title={`${pc.hostname || `PC-${String(pc.pc_id).padStart(5,"0")}`}`}
+      title={title}
       style={{
-        border: `1.5px solid ${selected ? "#93c5fd" : c.ring}`,
+        border: `1.5px solid ${selected ? "#93c5fd" : borderColor}`,
         boxShadow: selected
-          ? `0 0 0 2px #3b82f6, 0 0 10px ${c.glow}`
-          : `0 0 6px ${c.glow}`,
-        background: "rgba(15,23,42,0.9)",
+          ? `0 0 0 2px #3b82f6, 0 0 10px ${glowColor}`
+          : `0 0 6px ${glowColor}`,
+        background: hasAlert
+          ? "rgba(40,10,10,0.95)"
+          : isRecording
+          ? "rgba(30,10,45,0.95)"
+          : "rgba(15,23,42,0.9)",
         cursor: "pointer",
         transition: "all 0.2s",
         position: "relative",
@@ -65,37 +86,81 @@ function PcBox({ pc, selected, onClick }) {
         flexDirection: "column",
         alignItems: "center",
         gap: 2,
+        minWidth: 52,
       }}
     >
       {/* PC ID */}
-      <span style={{ color: c.label, fontSize: 8, fontWeight: 700, letterSpacing: 0 }}>
+      <span style={{ color: hasAlert ? "#f87171" : c.label, fontSize: 8, fontWeight: 700 }}>
         {String(pc.pc_id).padStart(5, "0")}
       </span>
 
       {/* Monitor icon */}
       <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
-        <rect x="1" y="1" width="16" height="10" rx="1.5" stroke={c.ring} strokeWidth="1.2" fill="rgba(15,23,42,0.6)" />
-        <rect x="7" y="11" width="4" height="1.5" rx="0.5" fill={c.ring} opacity="0.6" />
-        <rect x="5" y="12.5" width="8" height="0.8" rx="0.4" fill={c.ring} opacity="0.4" />
-        {isSending && (
-          <rect x="3" y="3" width="12" height="6" rx="0.5" fill={c.ring} opacity="0.18" />
+        <rect x="1" y="1" width="16" height="10" rx="1.5"
+          stroke={hasAlert ? "#ef4444" : isRecording ? "#a855f7" : c.ring}
+          strokeWidth="1.2" fill="rgba(15,23,42,0.6)" />
+        <rect x="7" y="11" width="4" height="1.5" rx="0.5"
+          fill={hasAlert ? "#ef4444" : isRecording ? "#a855f7" : c.ring} opacity="0.6" />
+        <rect x="5" y="12.5" width="8" height="0.8" rx="0.4"
+          fill={hasAlert ? "#ef4444" : isRecording ? "#a855f7" : c.ring} opacity="0.4" />
+        {/* Écran actif si enregistrement */}
+        {isRecording && !hasAlert && (
+          <rect x="3" y="3" width="12" height="6" rx="0.5" fill="#a855f7" opacity="0.2" />
         )}
       </svg>
 
-      {/* Queue badge */}
-      {queue !== null && queue > 0 && (
+      {/* Nom opérateur */}
+      {operator && (
         <span style={{
-          background: "#6366f1",
-          color: "#fff",
-          fontSize: 7,
-          fontWeight: 700,
-          borderRadius: 3,
-          padding: "0 3px",
-          lineHeight: "11px",
+          color: hasAlert ? "#fca5a5" : isRecording ? "#d8b4fe" : "#94a3b8",
+          fontSize: 6,
+          fontWeight: 600,
+          maxWidth: 50,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          textAlign: "center",
         }}>
-          {queue}
+          {operator}
         </span>
       )}
+
+      {/* Badges REC + ALERT */}
+      <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+        {isRecording && (
+          <span style={{
+            background: "#7c3aed",
+            color: "#fff",
+            fontSize: 6,
+            fontWeight: 700,
+            borderRadius: 2,
+            padding: "0 2px",
+            lineHeight: "10px",
+          }}>REC</span>
+        )}
+        {hasAlert && (
+          <span style={{
+            background: "#dc2626",
+            color: "#fff",
+            fontSize: 6,
+            fontWeight: 700,
+            borderRadius: 2,
+            padding: "0 2px",
+            lineHeight: "10px",
+          }}>⚠</span>
+        )}
+        {queue !== null && queue > 0 && !isRecording && !hasAlert && (
+          <span style={{
+            background: "#6366f1",
+            color: "#fff",
+            fontSize: 6,
+            fontWeight: 700,
+            borderRadius: 2,
+            padding: "0 2px",
+            lineHeight: "10px",
+          }}>{queue}</span>
+        )}
+      </div>
 
       {/* Pulse dot top-right */}
       <span style={{
@@ -105,8 +170,8 @@ function PcBox({ pc, selected, onClick }) {
         width: 5,
         height: 5,
         borderRadius: "50%",
-        background: c.ring,
-        boxShadow: `0 0 4px ${c.glow}`,
+        background: borderColor,
+        boxShadow: `0 0 4px ${glowColor}`,
       }} />
     </div>
   );
@@ -145,7 +210,12 @@ function PcDetailPanel({ pc, onClose }) {
         >✕</button>
       </div>
 
-      <Row label="ID" value={`PC-${String(pc.pc_id).padStart(2, "0")}`} />
+      <Row label="ID" value={`PC-${String(pc.pc_id).padStart(5, "0")}`} />
+      <Row label="Opérateur" value={pc.operator_username ?? "—"} color={pc.operator_username ? "#e2e8f0" : "#4b5563"} />
+      <Row label="Enregistrement" value={pc.is_recording ? "● EN COURS" : "Inactif"}
+        color={pc.is_recording ? "#a855f7" : "#4b5563"} />
+      <Row label="Alerte" value={pc.has_alert ? "⚠ OUI" : "Non"}
+        color={pc.has_alert ? "#ef4444" : "#4b5563"} />
       <Row label="Statut" value={st.toUpperCase()} color={c.label} />
       <Row label="Vu le" value={pc.timestamp ? new Date(pc.timestamp).toLocaleString("fr-FR") : "—"} />
 
@@ -343,20 +413,22 @@ function ProgressBar({ pct, color }) {
 // ── Légende ───────────────────────────────────────────────────────────────────
 function Legend() {
   const items = [
-    { st: "active",       label: "Actif" },
-    { st: "sending",      label: "Envoi en cours" },
-    { st: "queued",       label: "File en attente" },
-    { st: "disconnected", label: "Déconnecté" },
-    { st: "never_seen",   label: "Non enregistré" },
+    { color: "#22c55e",  label: "Actif" },
+    { color: "#a855f7",  label: "Enregistrement" },
+    { color: "#ef4444",  label: "Alerte" },
+    { color: "#f59e0b",  label: "Envoi" },
+    { color: "#6366f1",  label: "File" },
+    { color: "#dc2626",  label: "Déconnecté" },
+    { color: "#1f2937",  label: "Inconnu" },
   ];
   return (
-    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-      {items.map(({ st, label }) => (
-        <div key={st} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+    <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      {items.map(({ color, label }) => (
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{
             width: 8, height: 8, borderRadius: "50%",
-            background: STATUS_COLOR[st].ring,
-            boxShadow: `0 0 4px ${STATUS_COLOR[st].glow}`,
+            background: color,
+            boxShadow: `0 0 4px ${color}66`,
             display: "inline-block",
           }} />
           <span style={{ color: "#6b7280", fontSize: 10 }}>{label}</span>
