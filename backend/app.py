@@ -83,10 +83,24 @@ except Exception:
     sys.exit(1)
 
 try:
+    from routes.orchestrateur import orchestrateur_bp
+    logger.info("routes.orchestrateur imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.orchestrateur:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
     from kafka_consumer import start_consumer
     logger.info("kafka_consumer imported OK")
 except Exception:
     logger.critical("FAILED to import kafka_consumer:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from orchestrateur_consumer import start_orchestrateur_consumer
+    logger.info("orchestrateur_consumer imported OK")
+except Exception:
+    logger.critical("FAILED to import orchestrateur_consumer:\n%s", traceback.format_exc())
     sys.exit(1)
 
 logger.info("=== All imports successful — creating Flask app ===")
@@ -115,11 +129,13 @@ app.register_blueprint(query_bp)
 app.register_blueprint(metadata_bp)
 app.register_blueprint(kpis_bp)
 app.register_blueprint(salle_bp)
+app.register_blueprint(orchestrateur_bp)
 
 logger.info("=== Blueprints registered — app ready ===")
 
-# Start Kafka consumer background thread
+# Start Kafka consumer background threads
 start_consumer()
+start_orchestrateur_consumer()
 
 
 @app.route("/api/health", methods=["GET"])

@@ -8,6 +8,7 @@ import SessionDetailPage from "./pages/SessionDetailPage";
 import QueryPage from "./pages/QueryPage";
 import SessionsMetadataPage from "./pages/SessionsMetadataPage";
 import SalleRecoltePage from "./pages/SalleRecoltePage";
+import OrchestrateurPage from "./pages/OrchestrateurPage";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
               <Route path="/sessions/:id"        element={<SessionDetailPage />} />
               <Route path="/query"               element={<QueryPage />} />
               <Route path="/salle-recolte"       element={<SalleRecoltePage />} />
+              <Route path="/orchestrateur"       element={<OrchestrateurPage />} />
             </Routes>
           </main>
         </div>

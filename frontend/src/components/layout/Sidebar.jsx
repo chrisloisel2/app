@@ -79,6 +79,12 @@ export default function Sidebar() {
           >
             <span>⬡</span> Salle de récolte
           </NavLink>
+          <NavLink
+            to="/orchestrateur"
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}
+          >
+            <span>◎</span> Orchestrateur
+          </NavLink>
         </div>
 
         {/* DATA EXPLORER */}
