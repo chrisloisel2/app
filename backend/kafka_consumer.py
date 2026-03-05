@@ -62,28 +62,9 @@ import json
 import logging
 import threading
 import time
-from collections import defaultdict
 from datetime import datetime, timezone
 
-from pymongo import MongoClient
-
 logger = logging.getLogger(__name__)
-
-# ── MongoDB operator lookup ──────────────────────────────────────────────────
-def _load_operators_by_poste() -> dict:
-    """Retourne un dict {numero_poste: username} depuis la collection operators."""
-    try:
-        from config import MONGODB_URI
-        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=2000)
-        col = client["physical_data"]["operators"]
-        return {
-            doc["numero_poste"]: doc.get("username", "")
-            for doc in col.find({}, {"numero_poste": 1, "username": 1, "_id": 0})
-            if doc.get("numero_poste")
-        }
-    except Exception as exc:
-        logger.warning("Impossible de charger les opérateurs depuis MongoDB: %s", exc)
-        return {}
 
 # ── In-memory state (updated by the background consumer thread) ──────────────
 
@@ -196,8 +177,6 @@ def start_consumer():
 
 def get_state_snapshot() -> dict:
     """Return a JSON-serialisable snapshot of the current state."""
-    operators = _load_operators_by_poste()   # {numero_poste: username}
-
     with _state_lock:
         # Build PC list for all 30 slots
         pcs = []
@@ -228,15 +207,10 @@ def get_state_snapshot() -> dict:
                     "_never_seen": True,
                 }
 
-            # ── Enrichissement opérateur ──────────────────────────────────
-            hn = pc.get("hostname", hostname)
-            pc["operator_username"] = operators.get(hn, None)
-
-            # is_recording : champ direct du message Kafka
-            pc["is_recording"] = bool(pc.get("is_recording"))
-
-            # has_alert : champ direct OU déconnexion
-            pc["has_alert"] = bool(pc.get("has_alert") or pc.get("_disconnected"))
+            # Champs directs depuis le message Kafka
+            pc["operator_username"] = pc.get("operator_username") or None
+            pc["is_recording"]      = bool(pc.get("is_recording"))
+            pc["has_alert"]         = bool(pc.get("has_alert") or pc.get("_disconnected"))
 
             pcs.append(pc)
 
