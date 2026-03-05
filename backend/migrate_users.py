@@ -88,9 +88,30 @@ def migrate(src_name: str, dst_name: str, label: str):
     print(f"[{label}] Résultat : {migrated} migré(s), {skipped} ignoré(s).")
 
 
-print("=== Migration des utilisateurs ===")
+print("=== Étape 1 : migration des anciennes collections ===")
 migrate("operateurs",  "operators",  "Opérateurs")
 migrate("annotateurs", "annotators", "Annotateurs")
+
+print("\n=== Étape 2 : correction des docs sans champ 'username' ===")
+for col_name in ("operators", "annotators"):
+    col   = db[col_name]
+    fixed = 0
+    for doc in col.find({"username": {"$exists": False}}):
+        # Récupère la valeur depuis nom_utilisateur ou login
+        username = (
+            doc.get("nom_utilisateur")
+            or doc.get("login")
+            or ""
+        ).strip()
+        if not username:
+            print(f"  ⚠ {col_name} {doc['_id']} : impossible de déterminer username, ignoré.")
+            continue
+        col.update_one({"_id": doc["_id"]}, {"$set": {"username": username}})
+        print(f"  ✓ {col_name} '{username}' : champ username ajouté.")
+        fixed += 1
+    if fixed:
+        print(f"  → {fixed} doc(s) corrigé(s) dans '{col_name}'.")
+
 print("\n=== Terminé ===")
 
 # Vérification finale
