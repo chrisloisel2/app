@@ -522,10 +522,19 @@ export default function SalleRecoltePage() {
   }, []);
 
   useEffect(() => {
-    const es = new EventSource("/api/salle/stream");
-    es.onmessage = (e) => handleMessage(e.data);
-    es.onerror   = () => setError("Connexion SSE perdue — reconnexion…");
-    return () => es.close();
+    let active = true;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/salle");
+        const msg = await res.json();
+        if (active) handleMessage(JSON.stringify(msg));
+      } catch {
+        if (active) setError("Erreur de connexion…");
+      }
+      if (active) setTimeout(poll, 50);
+    };
+    poll();
+    return () => { active = false; };
   }, [handleMessage]);
 
   const pcs = Array.from({ length: 30 }, (_, i) => {

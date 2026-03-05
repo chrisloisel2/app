@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   fetchOperateurs,
   createOperateur,
@@ -33,14 +33,10 @@ export default function OperateursPage() {
   }, []);
 
   // Chargement initial + re-fetch silencieux piloté par SSE Kafka
-  const loadRef = useRef(load);
-  loadRef.current = load;
-
   useEffect(() => {
     load();
-    const es = new EventSource("/api/salle/stream");
-    es.onmessage = () => loadRef.current(true); // re-fetch opérateurs dès que Kafka pousse
-    return () => es.close();
+    const id = setInterval(() => load(true), 500);
+    return () => clearInterval(id);
   }, [load]);
 
   const openCreate = () => {
