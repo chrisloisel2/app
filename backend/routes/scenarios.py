@@ -4,7 +4,12 @@ import logging
 import threading
 from datetime import datetime
 
-import pika
+try:
+    import pika
+    _PIKA_OK = True
+except ImportError:
+    _PIKA_OK = False
+
 from bson import ObjectId
 from flask import Blueprint, jsonify, request
 from pymongo import MongoClient
@@ -32,6 +37,8 @@ def _ser(doc):
 
 # ── RabbitMQ helpers ───────────────────────────────────────────────────────────
 def _rmq_connection():
+    if not _PIKA_OK:
+        raise RuntimeError("pika non installé")
     params = pika.URLParameters(RABBIT_URL)
     params.socket_timeout = 5
     return pika.BlockingConnection(params)
@@ -49,7 +56,7 @@ def _publish(payload: dict):
                 routing_key=SCENARIOS_QUEUE,
                 body=json.dumps(payload, ensure_ascii=False),
                 properties=pika.BasicProperties(
-                    delivery_mode=2,          # persistent
+                    delivery_mode=2,
                     content_type="application/json",
                 ),
             )
@@ -63,6 +70,8 @@ def _publish(payload: dict):
 
 def _rmq_status() -> dict:
     """Return RabbitMQ connectivity status + queue depth."""
+    if not _PIKA_OK:
+        return {"connected": False, "error": "pika non installé (redémarrer le container)"}
     try:
         conn = _rmq_connection()
         ch   = conn.channel()
@@ -75,6 +84,11 @@ def _rmq_status() -> dict:
 
 
 # ── REST Routes ────────────────────────────────────────────────────────────────
+
+@scenarios_bp.route("/api/scenarios/rabbitmq/status", methods=["GET"])
+def rabbitmq_status():
+    return jsonify(_rmq_status())
+
 
 @scenarios_bp.route("/api/scenarios", methods=["GET"])
 def list_scenarios():
@@ -183,8 +197,3 @@ def publish_scenario(sid):
     scenario = _ser(doc)
     _publish({"event": "scenario_dispatched", "scenario": scenario})
     return jsonify({"published": True, "queue": SCENARIOS_QUEUE})
-
-
-@scenarios_bp.route("/api/scenarios/rabbitmq/status", methods=["GET"])
-def rabbitmq_status():
-    return jsonify(_rmq_status())
