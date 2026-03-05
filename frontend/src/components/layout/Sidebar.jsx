@@ -70,6 +70,17 @@ export default function Sidebar() {
           )}
         </div>
 
+        {/* INFRASTRUCTURE */}
+        <div>
+          <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Infrastructure</p>
+          <NavLink
+            to="/salle-recolte"
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}
+          >
+            <span>⬡</span> Salle de récolte
+          </NavLink>
+        </div>
+
         {/* DATA EXPLORER */}
         <div>
           <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Data Explorer</p>

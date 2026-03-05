@@ -75,6 +75,20 @@ except Exception:
     logger.critical("FAILED to import routes.kpis:\n%s", traceback.format_exc())
     sys.exit(1)
 
+try:
+    from routes.salle import salle_bp
+    logger.info("routes.salle imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.salle:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from kafka_consumer import start_consumer
+    logger.info("kafka_consumer imported OK")
+except Exception:
+    logger.critical("FAILED to import kafka_consumer:\n%s", traceback.format_exc())
+    sys.exit(1)
+
 logger.info("=== All imports successful — creating Flask app ===")
 
 import os
@@ -100,8 +114,12 @@ app.register_blueprint(pinces_bp)
 app.register_blueprint(query_bp)
 app.register_blueprint(metadata_bp)
 app.register_blueprint(kpis_bp)
+app.register_blueprint(salle_bp)
 
 logger.info("=== Blueprints registered — app ready ===")
+
+# Start Kafka consumer background thread
+start_consumer()
 
 
 @app.route("/api/health", methods=["GET"])

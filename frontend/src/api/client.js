@@ -14,6 +14,7 @@ export const fetchSessionsMetadata  = ()            => api.get("/api/metadata/se
 export const fetchSessionMetadata   = (id)          => api.get(`/api/metadata/sessions/${id}`);
 export const runQuery               = (body)        => api.post("/api/query", body);
 export const checkHealth            = ()            => api.get("/api/health");
+export const fetchSalleRecolte      = ()            => api.get("/api/salle");
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
 export const fetchKpiOverview      = ()            => api.get("/api/kpis/overview");
