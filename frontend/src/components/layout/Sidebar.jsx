@@ -111,6 +111,7 @@ export default function Sidebar() {
           {[
             { to: "/operateurs",  label: "Opérateurs",  icon: "◉" },
             { to: "/annotateurs", label: "Annotateurs", icon: "◎" },
+            { to: "/scenarios",   label: "Scénarios",   icon: "◈" },
           ].map(({ to, label, icon }) => (
             <NavLink
               key={to}

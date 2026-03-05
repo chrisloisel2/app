@@ -7,7 +7,7 @@ annotateurs_bp = Blueprint("annotateurs", __name__)
 
 def get_col():
     client = MongoClient(MONGODB_URI)
-    return client["physicaldata"]["annotateurs"]
+    return client["physical_data"]["annotateurs"]
 
 
 @annotateurs_bp.route("/api/annotateurs", methods=["GET"])

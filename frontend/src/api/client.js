@@ -29,6 +29,15 @@ export const createAnnotateur  = (body)    => api.post("/api/annotateurs", body)
 export const updateAnnotateur  = (id, body)=> api.put(`/api/annotateurs/${id}`, body);
 export const deleteAnnotateur  = (id)      => api.delete(`/api/annotateurs/${id}`);
 
+// ── Scénarios ─────────────────────────────────────────────────────────────────
+export const fetchScenarios        = ()         => api.get("/api/scenarios");
+export const fetchScenario         = (id)       => api.get(`/api/scenarios/${id}`);
+export const createScenario        = (body)     => api.post("/api/scenarios", body);
+export const updateScenario        = (id, body) => api.put(`/api/scenarios/${id}`, body);
+export const deleteScenario        = (id)       => api.delete(`/api/scenarios/${id}`);
+export const publishScenario       = (id)       => api.post(`/api/scenarios/${id}/publish`);
+export const fetchRabbitMQStatus   = ()         => api.get("/api/scenarios/rabbitmq/status");
+
 // ── KPIs ──────────────────────────────────────────────────────────────────────
 export const fetchKpiOverview      = ()            => api.get("/api/kpis/overview");
 export const fetchKpiDaily         = (days = 30)   => api.get("/api/kpis/daily", { params: { days } });

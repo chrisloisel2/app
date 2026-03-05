@@ -11,6 +11,7 @@ import SalleRecoltePage from "./pages/SalleRecoltePage";
 import OrchestrateurPage from "./pages/OrchestrateurPage";
 import OperateursPage from "./pages/OperateursPage";
 import AnnotateursPage from "./pages/AnnotateursPage";
+import ScenariosPage from "./pages/ScenariosPage";
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
               <Route path="/orchestrateur"       element={<OrchestrateurPage />} />
               <Route path="/operateurs"          element={<OperateursPage />} />
               <Route path="/annotateurs"         element={<AnnotateursPage />} />
+              <Route path="/scenarios"           element={<ScenariosPage />} />
             </Routes>
           </main>
         </div>
