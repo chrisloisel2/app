@@ -17,6 +17,18 @@ export const checkHealth            = ()            => api.get("/api/health");
 export const fetchSalleRecolte      = ()            => api.get("/api/salle");
 export const fetchOrchestrateur     = ()            => api.get("/api/orchestrateur");
 
+// ── Opérateurs ────────────────────────────────────────────────────────────────
+export const fetchOperateurs   = ()        => api.get("/api/operateurs");
+export const createOperateur   = (body)    => api.post("/api/operateurs", body);
+export const updateOperateur   = (id, body)=> api.put(`/api/operateurs/${id}`, body);
+export const deleteOperateur   = (id)      => api.delete(`/api/operateurs/${id}`);
+
+// ── Annotateurs ───────────────────────────────────────────────────────────────
+export const fetchAnnotateurs  = ()        => api.get("/api/annotateurs");
+export const createAnnotateur  = (body)    => api.post("/api/annotateurs", body);
+export const updateAnnotateur  = (id, body)=> api.put(`/api/annotateurs/${id}`, body);
+export const deleteAnnotateur  = (id)      => api.delete(`/api/annotateurs/${id}`);
+
 // ── KPIs ──────────────────────────────────────────────────────────────────────
 export const fetchKpiOverview      = ()            => api.get("/api/kpis/overview");
 export const fetchKpiDaily         = (days = 30)   => api.get("/api/kpis/daily", { params: { days } });

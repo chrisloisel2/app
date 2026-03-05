@@ -104,6 +104,23 @@ export default function Sidebar() {
             </NavLink>
           ))}
         </div>
+
+        {/* ADMINISTRATION */}
+        <div>
+          <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Administration</p>
+          {[
+            { to: "/operateurs",  label: "Opérateurs",  icon: "◉" },
+            { to: "/annotateurs", label: "Annotateurs", icon: "◎" },
+          ].map(({ to, label, icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}
+            >
+              <span>{icon}</span> {label}
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
       <div className="px-4 py-3 border-t border-gray-800">

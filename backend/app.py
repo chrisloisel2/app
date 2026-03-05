@@ -90,6 +90,20 @@ except Exception:
     sys.exit(1)
 
 try:
+    from routes.operateurs import operateurs_bp
+    logger.info("routes.operateurs imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.operateurs:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.annotateurs import annotateurs_bp
+    logger.info("routes.annotateurs imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.annotateurs:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
     from kafka_consumer import start_consumer
     logger.info("kafka_consumer imported OK")
 except Exception:
@@ -130,6 +144,8 @@ app.register_blueprint(metadata_bp)
 app.register_blueprint(kpis_bp)
 app.register_blueprint(salle_bp)
 app.register_blueprint(orchestrateur_bp)
+app.register_blueprint(operateurs_bp)
+app.register_blueprint(annotateurs_bp)
 
 logger.info("=== Blueprints registered — app ready ===")
 

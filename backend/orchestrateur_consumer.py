@@ -30,7 +30,8 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-ALERT_TIMEOUT_S = 120.0
+ALERT_TIMEOUT_S    = 120.0
+PRESENCE_TIMEOUT_S = 30.0   # individu marqué déconnecté si silencieux > 30 s
 
 _state = {
     "individuals": {},   # id -> dict
@@ -40,6 +41,7 @@ _state = {
 }
 _state_lock = threading.Lock()
 _consumer_thread = None
+_watchdog_thread = None
 
 
 def _get_bootstrap_server():
@@ -89,6 +91,13 @@ def _process_message(raw_value: bytes):
             "last_ts": 0.0,
             "connected": True,
         })
+
+        # Message de déconnexion explicite
+        if ev.get("disconnected"):
+            ind["connected"] = False
+            ind["last_ts"]   = float(ev.get("ts", now))
+            _state["individuals"][uid] = ind
+            return
 
         ind["id"]       = uid
         ind["operator"] = str(ev.get("operator", ind["operator"]))
@@ -157,9 +166,23 @@ def _consumer_loop():
             time.sleep(10)
 
 
+def _watchdog_loop():
+    """Periodically mark individuals as disconnected if they stopped sending messages."""
+    while True:
+        time.sleep(5)
+        now = time.time()
+        with _state_lock:
+            for ind in _state["individuals"].values():
+                if ind["connected"] and ind["last_ts"] > 0:
+                    if (now - ind["last_ts"]) > PRESENCE_TIMEOUT_S:
+                        ind["connected"] = False
+                        logger.debug("Orchestrateur: individual %s timed out (no message for %.0fs)",
+                                     ind["id"], now - ind["last_ts"])
+
+
 def start_orchestrateur_consumer():
-    """Start the background Kafka consumer thread for topic1 (idempotent)."""
-    global _consumer_thread
+    """Start the background Kafka consumer + watchdog threads for topic1 (idempotent)."""
+    global _consumer_thread, _watchdog_thread
     if _consumer_thread and _consumer_thread.is_alive():
         return
     _consumer_thread = threading.Thread(
@@ -168,7 +191,14 @@ def start_orchestrateur_consumer():
         daemon=True,
     )
     _consumer_thread.start()
-    logger.info("Orchestrateur Kafka consumer thread started")
+
+    _watchdog_thread = threading.Thread(
+        target=_watchdog_loop,
+        name="kafka-topic1-watchdog",
+        daemon=True,
+    )
+    _watchdog_thread.start()
+    logger.info("Orchestrateur Kafka consumer + watchdog threads started")
 
 
 def get_orchestrateur_snapshot() -> dict:

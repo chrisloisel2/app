@@ -9,6 +9,8 @@ import QueryPage from "./pages/QueryPage";
 import SessionsMetadataPage from "./pages/SessionsMetadataPage";
 import SalleRecoltePage from "./pages/SalleRecoltePage";
 import OrchestrateurPage from "./pages/OrchestrateurPage";
+import OperateursPage from "./pages/OperateursPage";
+import AnnotateursPage from "./pages/AnnotateursPage";
 
 export default function App() {
   return (
@@ -28,6 +30,8 @@ export default function App() {
               <Route path="/query"               element={<QueryPage />} />
               <Route path="/salle-recolte"       element={<SalleRecoltePage />} />
               <Route path="/orchestrateur"       element={<OrchestrateurPage />} />
+              <Route path="/operateurs"          element={<OperateursPage />} />
+              <Route path="/annotateurs"         element={<AnnotateursPage />} />
             </Routes>
           </main>
         </div>
