@@ -7,7 +7,7 @@ operateurs_bp = Blueprint("operateurs", __name__)
 
 def get_col():
     client = MongoClient(MONGODB_URI)
-    return client["physical_data"]["operateurs"]
+    return client["physical_data"]["operators"]
 
 
 @operateurs_bp.route("/api/operateurs", methods=["GET"])
