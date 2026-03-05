@@ -521,18 +521,31 @@ export default function SalleRecoltePage() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    const poll = async () => {
-      try {
-        const res = await fetch("/api/salle");
-        if (active) handleMessage(await res.json());
-      } catch {
-        if (active) setError("Erreur de connexion…");
-      }
-      if (active) setTimeout(poll, 50);
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const url   = `${proto}://${window.location.host}/api/salle/ws`;
+    let ws;
+    let reconnectTimer;
+
+    const connect = () => {
+      ws = new WebSocket(url);
+
+      ws.onmessage = (e) => {
+        try { handleMessage(JSON.parse(e.data)); } catch { /* ignore */ }
+      };
+
+      ws.onerror = () => setError("WebSocket : erreur de connexion");
+
+      ws.onclose = () => {
+        setError("WebSocket déconnecté — reconnexion…");
+        reconnectTimer = setTimeout(connect, 2000);
+      };
     };
-    poll();
-    return () => { active = false; };
+
+    connect();
+    return () => {
+      clearTimeout(reconnectTimer);
+      ws?.close();
+    };
   }, [handleMessage]);
 
   const pcs = useMemo(() => Array.from({ length: 30 }, (_, i) => {
@@ -584,7 +597,7 @@ export default function SalleRecoltePage() {
             SALLE DE RÉCOLTE
           </h1>
           <p style={{ color: "#4b5563", fontSize: 11, margin: "3px 0 0" }}>
-            Surveillance temps-réel · Kafka topic2 · SSE
+            Surveillance temps-réel · Kafka topic2 · WebSocket
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

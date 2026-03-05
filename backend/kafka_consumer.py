@@ -87,11 +87,11 @@ def _get_bootstrap_server():
     return f"{KAFKA_BROKER}:{KAFKA_BROKER_PORT}"
 
 
-def _notify_sse():
-    """Wake up SSE clients. Lazy import to avoid circular dependency."""
+def _notify_ws():
+    """Push state to all WebSocket clients. Lazy import to avoid circular dependency."""
     try:
-        from routes.salle import notify_sse
-        notify_sse()
+        from routes.salle import notify_ws
+        notify_ws()
     except Exception:
         pass
 
@@ -127,7 +127,7 @@ def _process_message(raw_value: bytes):
         else:
             logger.debug("Kafka topic2: unknown source '%s'", source)
 
-    _notify_sse()
+    _notify_ws()
 
 
 def _consumer_loop():

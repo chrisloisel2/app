@@ -124,6 +124,13 @@ except Exception:
     logger.critical("FAILED to import orchestrateur_consumer:\n%s", traceback.format_exc())
     sys.exit(1)
 
+try:
+    from flask_sock import Sock
+    logger.info("flask_sock imported OK")
+except Exception:
+    logger.critical("FAILED to import flask_sock:\n%s", traceback.format_exc())
+    sys.exit(1)
+
 logger.info("=== All imports successful — creating Flask app ===")
 
 import os
@@ -132,6 +139,7 @@ logger.info("Environment — NAS_SESSIONS_DIR=%s  MONGODB_URI=%s",
             os.environ.get("MONGODB_URI", "(not set)"))
 
 app = Flask(__name__)
+sock = Sock(app)
 CORS(
     app,
     resources={r"/api/*": {"origins": get_cors_allowed_origins()}},
@@ -154,6 +162,9 @@ app.register_blueprint(orchestrateur_bp)
 app.register_blueprint(operateurs_bp)
 app.register_blueprint(annotateurs_bp)
 app.register_blueprint(scenarios_bp)
+
+from routes.salle import register_ws_route
+register_ws_route(sock)
 
 logger.info("=== Blueprints registered — app ready ===")
 
