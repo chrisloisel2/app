@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from pymongo import MongoClient
 from bson import ObjectId
 from config import MONGODB_URI
+from kafka_consumer import get_state_snapshot
 
 operateurs_bp = Blueprint("operateurs", __name__)
 
@@ -14,9 +15,26 @@ def get_col():
 def list_operateurs():
     col = get_col()
     docs = list(col.find({}, {"password": 0}))
+
+    # Construire un index {operator_username -> état PC} depuis le snapshot Kafka
+    try:
+        snapshot = get_state_snapshot()
+        pc_by_operator = {
+            pc["operator_username"]: pc
+            for pc in snapshot.get("pcs", [])
+            if pc.get("operator_username")
+        }
+    except Exception:
+        pc_by_operator = {}
+
     for d in docs:
         d["_id"] = str(d["_id"])
         d.setdefault("nom_utilisateur", d.get("username", ""))
+        pc = pc_by_operator.get(d.get("username"))
+        d["has_alert"]    = bool(pc and pc.get("has_alert"))
+        d["is_recording"] = bool(pc and pc.get("is_recording"))
+        d["pc_id"]        = pc["pc_id"] if pc else None
+
     return jsonify(docs)
 
 

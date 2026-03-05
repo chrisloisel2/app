@@ -87,6 +87,15 @@ def _get_bootstrap_server():
     return f"{KAFKA_BROKER}:{KAFKA_BROKER_PORT}"
 
 
+def _notify_sse():
+    """Wake up SSE clients. Lazy import to avoid circular dependency."""
+    try:
+        from routes.salle import notify_sse
+        notify_sse()
+    except Exception:
+        pass
+
+
 def _process_message(raw_value: bytes):
     try:
         msg = json.loads(raw_value.decode("utf-8"))
@@ -102,11 +111,8 @@ def _process_message(raw_value: bytes):
             if 1 <= pc_id <= 30:
                 _pc_ever_seen.add(pc_id)
                 if msg.get("disconnected"):
-                    # Message explicite de déconnexion : on marque _disconnected
-                    # mais on conserve le hostname et les dernières infos connues
                     prev = _state["pcs"].get(pc_id, {})
                     _state["pcs"][pc_id] = {
-                        **prev,
                         "pc_id": pc_id,
                         "hostname": msg.get("hostname", prev.get("hostname", f"PC-{pc_id:05d}")),
                         "timestamp": msg.get("timestamp"),
@@ -120,6 +126,8 @@ def _process_message(raw_value: bytes):
             _state["nas"] = msg
         else:
             logger.debug("Kafka topic2: unknown source '%s'", source)
+
+    _notify_sse()
 
 
 def _consumer_loop():

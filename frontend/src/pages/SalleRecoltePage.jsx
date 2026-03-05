@@ -1,5 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
-import { fetchSalleRecolte } from "../api/client";
+import { useEffect, useState } from "react";
 
 // ── Couleurs de statut ────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -440,29 +439,31 @@ function Legend() {
 
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function SalleRecoltePage() {
-  const [data, setData]           = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
+  const [data, setData]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [selectedPc, setSelectedPc] = useState(null);
-  const REFRESH_MS = 3000;
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetchSalleRecolte();
-      setData(res.data);
-      setError(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, REFRESH_MS);
-    return () => clearInterval(id);
-  }, [load]);
+    const es = new EventSource("/api/salle/stream");
+
+    es.onmessage = (e) => {
+      try {
+        setData(JSON.parse(e.data));
+        setError(null);
+        setLoading(false);
+      } catch {
+        // ignore malformed frame
+      }
+    };
+
+    es.onerror = () => {
+      setError("Connexion SSE perdue — reconnexion…");
+      // EventSource reconnects automatically
+    };
+
+    return () => es.close();
+  }, []);
 
   const pcs = data?.pcs ?? Array.from({ length: 30 }, (_, i) => ({
     source: "pc", pc_id: i + 1,
@@ -511,7 +512,7 @@ export default function SalleRecoltePage() {
             SALLE DE RÉCOLTE
           </h1>
           <p style={{ color: "#4b5563", fontSize: 11, margin: "3px 0 0" }}>
-            Surveillance temps-réel · Kafka topic2 · {REFRESH_MS / 1000}s
+            Surveillance temps-réel · Kafka topic2 · SSE
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

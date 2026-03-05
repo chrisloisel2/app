@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   fetchOperateurs,
   createOperateur,
@@ -23,16 +23,25 @@ export default function OperateursPage() {
   // delete confirm
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const load = () => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     fetchOperateurs()
       .then((r) => setOperateurs(r.data))
       .catch((e) => setError(e.response?.data?.error ?? e.message))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  // Chargement initial + re-fetch silencieux piloté par SSE Kafka
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
+  useEffect(() => {
+    load();
+    const es = new EventSource("/api/salle/stream");
+    es.onmessage = () => loadRef.current(true); // re-fetch opérateurs dès que Kafka pousse
+    return () => es.close();
+  }, [load]);
 
   const openCreate = () => {
     setEditTarget(null);
@@ -118,14 +127,45 @@ export default function OperateursPage() {
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">N° Poste</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Nom d'utilisateur</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">État temps-réel</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {operateurs.map((op) => (
-                <tr key={op._id} className="hover:bg-gray-50 transition-colors">
+                <tr
+                  key={op._id}
+                  className={`transition-colors ${
+                    op.has_alert
+                      ? "bg-red-50 hover:bg-red-100"
+                      : op.is_recording
+                      ? "bg-purple-50 hover:bg-purple-100"
+                      : "hover:bg-gray-50"
+                  }`}
+                >
                   <td className="px-4 py-3 font-mono text-gray-700">{op.numero_poste}</td>
-                  <td className="px-4 py-3 text-gray-900 font-medium">{op.nom_utilisateur}</td>
+                  <td className="px-4 py-3">
+                    <span className={`font-medium ${op.has_alert ? "text-red-700" : "text-gray-900"}`}>
+                      {op.nom_utilisateur}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {op.has_alert ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
+                        ⚠ Alerte
+                      </span>
+                    ) : op.is_recording ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                        ● Enregistrement
+                      </span>
+                    ) : op.pc_id ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                        Connecté
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right space-x-2">
                     <button
                       onClick={() => openEdit(op)}
