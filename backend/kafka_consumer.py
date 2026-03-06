@@ -1,61 +1,33 @@
 """
-Kafka consumer for topic2 — Salle de récolte de données.
+Kafka consumer for topic2 (KAFKA_SALLE_TOPIC).
 
-Messages attendus (JSON) depuis les PCs :
-  {
-    "source": "pc",
-    "pc_id": 1-30,
-    "hostname": "pc-01",
-    "timestamp": "2026-03-05T14:23:00Z",
-    "sqlite_queue": {
-      "pending_sessions": 3,
-      "total_records": 1240,
-      "oldest_pending_iso": "2026-03-05T08:00:00Z",
-      "sessions": [
-        { "session_id": "s001", "records": 412, "status": "pending" },
-        ...
-      ]
-    },
-    "last_send": {
-      "session_id": "s000",
-      "sent_at": "2026-03-05T14:20:00Z",
-      "status": "success",       // "success" | "failed" | "in_progress"
-      "records_sent": 412
-    }
-  }
+Deux producteurs publient sur ce topic unique :
 
-Messages attendus (JSON) depuis le Spool :
-  {
-    "source": "spool",
-    "timestamp": "2026-03-05T14:23:10Z",
-    "inbound_queue": [
-      { "pc_id": 3, "session_id": "s010", "received_at": "...", "size_mb": 12.4 }
-    ],
-    "processed_today": 58,
-    "forwarded_to_nas": 55,
-    "failed": 3,
-    "current_transfer": {
-      "from_pc": 7,
-      "session_id": "s011",
-      "progress_pct": 67,
-      "speed_mbps": 45.2
-    }
-  }
+1. SalleReporter (10 Hz) — état upload du poste
+   Discriminant : champ racine "source" == "pc"
+   {
+     "source": "pc", "pc_id": 3, "hostname": "PC-03",
+     "timestamp": "...", "operator_username": "alice",
+     "is_recording": true, "has_alert": false,
+     "sqlite_queue": { "pending_sessions": 2, "total_records": 1847,
+                       "oldest_pending_iso": "...", "sessions": [...] },
+     "last_send": { "session_id": "...", "sent_at": "...",
+                    "status": "success", "records_sent": 1203 }
+   }
+   Message de déconnexion : { "source": "pc", "pc_id": 3, "disconnected": true, "ts": ... }
 
-Messages attendus (JSON) depuis le NAS :
-  {
-    "source": "nas",
-    "timestamp": "2026-03-05T14:23:15Z",
-    "total_sessions": 4200,
-    "disk_used_gb": 1842,
-    "disk_total_gb": 8000,
-    "last_write": {
-      "session_id": "s009",
-      "written_at": "2026-03-05T14:21:00Z",
-      "size_mb": 11.8
-    },
-    "status": "online"           // "online" | "degraded" | "offline"
-  }
+2. KafkaEventPublisher (événementiel) — changements d'état cycle de vie
+   Discriminant : champ racine "type" présent
+   {
+     "type": "<event_type>", "station_id": "PC-03", "ts": 1741234567.123,
+     "operator": "alice", "scenario": "scenario-A", "payload": { ... }
+   }
+   Types d'événements : operator_connected, app_closed,
+     cameras_detected, pince_connected, pince_disconnected,
+     pince_switch_on, pince_switch_off, session_failed,
+     tracker_connected, tracker_disconnected, tracker_lost,
+     tracker_recovered, tracker_low_battery, tracker_critical_battery,
+     recording_started, recording_stopped
 """
 
 import json
@@ -66,29 +38,42 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# ── In-memory state (updated by the background consumer thread) ──────────────
+# ── In-memory state ───────────────────────────────────────────────────────────
 
+# SalleReporter state (keyed by pc_id int)
 _state = {
-    "pcs": {},        # pc_id (int) -> stable PC state dict (never reset between messages)
-    "spool": None,    # latest Spool message dict
-    "nas": None,      # latest NAS message dict
+    "pcs": {},         # pc_id (int) -> PC state dict
     "last_update": None,
     "connected": False,
     "errors": [],
 }
-# pc_id (int) -> True si le PC a été vu au moins une fois depuis le démarrage
+
+# KafkaEventPublisher state (keyed by station_id str, e.g. "PC-03")
+# station_id -> {
+#   "station_id", "operator", "scenario",
+#   "cameras": [...], "pinces": {"left": {...}, "right": {...}},
+#   "trackers": {idx -> {...}},
+#   "recording": {"is_recording": bool, "duration_s": float, "trigger": str,
+#                 "last_start_ts": float, "last_activity_ts": float},
+#   "connected": bool,  # False après app_closed
+#   "last_ts": float,
+# }
+_stations = {}
+
 _pc_ever_seen: set = set()
 _state_lock = threading.Lock()
 _consumer_thread = None
 
-# Champs qui déclenchent une notification WS si leur valeur change
+PRESENCE_TIMEOUT_S = 30.0  # station marquée déconnectée si silencieuse > 30 s
+
+# Champs visuels SalleReporter qui déclenchent une notification WS si changés
 _PC_WATCHED_FIELDS = {
     "operator_username", "is_recording", "has_alert",
     "sqlite_queue", "last_send", "_disconnected", "hostname",
 }
 
+
 def _pc_visual_changed(prev: dict, next_msg: dict) -> bool:
-    """Return True only if a visually-relevant field changed."""
     for field in _PC_WATCHED_FIELDS:
         if prev.get(field) != next_msg.get(field):
             return True
@@ -101,13 +86,196 @@ def _get_bootstrap_server():
 
 
 def _notify_ws():
-    """Push state to all WebSocket clients. Lazy import to avoid circular dependency."""
+    """Push state to all WebSocket clients."""
     try:
         from routes.salle import notify_ws
         notify_ws()
     except Exception:
         pass
 
+
+# ── SalleReporter handler ─────────────────────────────────────────────────────
+
+def _handle_salle_reporter(msg: dict, now: str):
+    """Process a SalleReporter message (source == 'pc')."""
+    pc_id = int(msg.get("pc_id", 0))
+    if not (1 <= pc_id <= 30):
+        return False
+
+    _pc_ever_seen.add(pc_id)
+    prev = _state["pcs"].get(pc_id, {})
+
+    if msg.get("disconnected"):
+        new_state = {
+            "pc_id": pc_id,
+            "hostname": msg.get("hostname") or prev.get("hostname") or f"PC-{pc_id:05d}",
+            "operator_username": prev.get("operator_username"),
+            "is_recording": False,
+            "has_alert": False,
+            "sqlite_queue": prev.get("sqlite_queue"),
+            "last_send": prev.get("last_send"),
+            "_disconnected": True,
+            "last_seen_at": prev.get("last_seen_at"),
+        }
+    else:
+        new_state = {
+            "pc_id": pc_id,
+            "hostname": msg.get("hostname") or prev.get("hostname") or f"PC-{pc_id:05d}",
+            "operator_username": msg.get("operator_username") or None,
+            "is_recording": bool(msg.get("is_recording")),
+            "has_alert": bool(msg.get("has_alert")),
+            "sqlite_queue": msg.get("sqlite_queue"),
+            "last_send": msg.get("last_send"),
+            "_disconnected": False,
+            "last_seen_at": now,
+        }
+
+    if _pc_visual_changed(prev, new_state):
+        _state["pcs"][pc_id] = new_state
+        return True
+    else:
+        if not msg.get("disconnected"):
+            prev["last_seen_at"] = now
+        return False
+
+
+# ── KafkaEventPublisher handler ───────────────────────────────────────────────
+
+def _default_station(station_id: str) -> dict:
+    return {
+        "station_id": station_id,
+        "operator": "",
+        "scenario": "",
+        "cameras": [],
+        "pinces": {
+            "left":  {"connected": False, "port": None},
+            "right": {"connected": False, "port": None},
+        },
+        "trackers": {},   # idx (str) -> {idx, serial, tracking, battery}
+        "recording": {
+            "is_recording": False,
+            "duration_s": 0.0,
+            "trigger": None,
+            "failed": False,
+            "last_start_ts": 0.0,
+            "last_activity_ts": 0.0,
+        },
+        "connected": True,
+        "last_ts": 0.0,
+    }
+
+
+def _handle_event(msg: dict) -> bool:
+    """Process a KafkaEventPublisher message (has 'type' field).
+    Returns True if state changed (triggers WS push).
+    """
+    event_type = msg.get("type", "")
+    station_id = str(msg.get("station_id", "")).strip()
+    if not station_id:
+        return False
+
+    payload = msg.get("payload") or {}
+    ts = float(msg.get("ts", time.time()))
+    operator = str(msg.get("operator", ""))
+    scenario = str(msg.get("scenario", ""))
+
+    st = _stations.get(station_id) or _default_station(station_id)
+    st["last_ts"] = ts
+    if operator:
+        st["operator"] = operator
+    if scenario:
+        st["scenario"] = scenario
+
+    if event_type == "operator_connected":
+        st["connected"] = True
+        st["operator"] = payload.get("operator", operator)
+        st["scenario"] = payload.get("scenario", scenario)
+
+    elif event_type == "app_closed":
+        st["connected"] = False
+        st["recording"]["is_recording"] = False
+
+    elif event_type == "cameras_detected":
+        st["cameras"] = payload.get("cameras", [])
+
+    elif event_type == "pince_connected":
+        side = payload.get("side", "right")
+        st["pinces"][side] = {"connected": True, "port": payload.get("port")}
+
+    elif event_type == "pince_disconnected":
+        side = payload.get("side", "right")
+        st["pinces"][side] = {"connected": False, "port": None}
+
+    elif event_type in ("pince_switch_on", "pince_switch_off"):
+        # Informational only — no persistent state change needed
+        pass
+
+    elif event_type == "session_failed":
+        st["recording"]["failed"] = True
+
+    elif event_type == "tracker_connected":
+        idx = str(payload.get("idx", ""))
+        st["trackers"][idx] = {
+            "idx": payload.get("idx"),
+            "serial": payload.get("serial", ""),
+            "tracking": True,
+            "battery": st["trackers"].get(idx, {}).get("battery", 1.0),
+        }
+
+    elif event_type == "tracker_disconnected":
+        idx = str(payload.get("idx", ""))
+        st["trackers"].pop(idx, None)
+
+    elif event_type == "tracker_lost":
+        idx = str(payload.get("idx", ""))
+        if idx in st["trackers"]:
+            st["trackers"][idx]["tracking"] = False
+
+    elif event_type == "tracker_recovered":
+        idx = str(payload.get("idx", ""))
+        if idx in st["trackers"]:
+            st["trackers"][idx]["tracking"] = True
+
+    elif event_type in ("tracker_low_battery", "tracker_critical_battery"):
+        idx = str(payload.get("idx", ""))
+        battery = float(payload.get("battery", 0.0))
+        if idx in st["trackers"]:
+            st["trackers"][idx]["battery"] = battery
+        else:
+            st["trackers"][idx] = {
+                "idx": payload.get("idx"),
+                "serial": "",
+                "tracking": False,
+                "battery": battery,
+            }
+
+    elif event_type == "recording_started":
+        now = time.time()
+        st["recording"]["is_recording"] = True
+        st["recording"]["trigger"] = payload.get("trigger")
+        st["recording"]["failed"] = False
+        st["recording"]["last_start_ts"] = now
+        st["recording"]["last_activity_ts"] = now
+        st["operator"] = payload.get("operator", operator)
+        st["scenario"] = payload.get("scenario", scenario)
+
+    elif event_type == "recording_stopped":
+        now = time.time()
+        st["recording"]["is_recording"] = False
+        st["recording"]["duration_s"] = float(payload.get("duration_s", 0.0))
+        st["recording"]["failed"] = bool(payload.get("failed", False))
+        st["recording"]["last_activity_ts"] = now
+
+    else:
+        logger.debug("KafkaEventPublisher: unknown event type '%s'", event_type)
+        _stations[station_id] = st
+        return False
+
+    _stations[station_id] = st
+    return True
+
+
+# ── Message dispatcher ────────────────────────────────────────────────────────
 
 def _process_message(raw_value: bytes):
     try:
@@ -116,86 +284,26 @@ def _process_message(raw_value: bytes):
         logger.warning("Kafka topic2: invalid JSON — %s", e)
         return
 
-    source = msg.get("source")
     should_notify = False
     now = datetime.now(timezone.utc).isoformat()
 
     with _state_lock:
         _state["last_update"] = now
 
-        if source == "pc":
-            pc_id = int(msg.get("pc_id", 0))
-            if 1 <= pc_id <= 30:
-                _pc_ever_seen.add(pc_id)
-                prev = _state["pcs"].get(pc_id, {})
-
-                if msg.get("disconnected"):
-                    new_state = {
-                        "pc_id": pc_id,
-                        "hostname": msg.get("hostname") or prev.get("hostname") or f"PC-{pc_id:05d}",
-                        # Preserve last known data for display in the detail panel
-                        "operator_username": prev.get("operator_username"),
-                        "is_recording": False,
-                        "has_alert": False,
-                        "sqlite_queue": prev.get("sqlite_queue"),
-                        "last_send": prev.get("last_send"),
-                        "_disconnected": True,
-                        "last_seen_at": prev.get("last_seen_at"),
-                    }
-                else:
-                    new_state = {
-                        "pc_id": pc_id,
-                        "hostname": msg.get("hostname") or prev.get("hostname") or f"PC-{pc_id:05d}",
-                        "operator_username": msg.get("operator_username") or None,
-                        "is_recording": bool(msg.get("is_recording")),
-                        "has_alert": bool(msg.get("has_alert")),
-                        "sqlite_queue": msg.get("sqlite_queue"),
-                        "last_send": msg.get("last_send"),
-                        "_disconnected": False,
-                        # last_seen_at is set server-side, not from message timestamp
-                        "last_seen_at": now,
-                    }
-
-                if _pc_visual_changed(prev, new_state):
-                    _state["pcs"][pc_id] = new_state
-                    should_notify = True
-                else:
-                    # Update last_seen_at silently without triggering WS push
-                    if not msg.get("disconnected"):
-                        prev["last_seen_at"] = now
-
-        elif source == "spool":
-            # Compare ignoring timestamp field to avoid spurious WS pushes
-            prev_spool = _state["spool"] or {}
-            if any(
-                prev_spool.get(k) != msg.get(k)
-                for k in ("inbound_queue", "processed_today", "forwarded_to_nas", "failed", "current_transfer")
-            ):
-                _state["spool"] = msg
-                should_notify = True
-            else:
-                # Update timestamp silently
-                if _state["spool"]:
-                    _state["spool"] = {**_state["spool"], "timestamp": msg.get("timestamp")}
-
-        elif source == "nas":
-            prev_nas = _state["nas"] or {}
-            if any(
-                prev_nas.get(k) != msg.get(k)
-                for k in ("total_sessions", "disk_used_gb", "disk_total_gb", "last_write", "status")
-            ):
-                _state["nas"] = msg
-                should_notify = True
-            else:
-                if _state["nas"]:
-                    _state["nas"] = {**_state["nas"], "timestamp": msg.get("timestamp")}
-
+        if "source" in msg and msg["source"] == "pc":
+            # SalleReporter — état upload poste
+            should_notify = _handle_salle_reporter(msg, now)
+        elif "type" in msg:
+            # KafkaEventPublisher — événement cycle de vie
+            should_notify = _handle_event(msg)
         else:
-            logger.debug("Kafka topic2: unknown source '%s'", source)
+            logger.debug("Kafka topic2: message sans discriminant reconnu")
 
     if should_notify:
         _notify_ws()
 
+
+# ── Consumer loop ─────────────────────────────────────────────────────────────
 
 def _consumer_loop():
     bootstrap = _get_bootstrap_server()
@@ -210,7 +318,7 @@ def _consumer_loop():
                 auto_offset_reset="latest",
                 enable_auto_commit=True,
                 group_id="salle-recolte-monitor",
-                value_deserializer=None,   # raw bytes, we decode manually
+                value_deserializer=None,
                 consumer_timeout_ms=5000,
             )
             with _state_lock:
@@ -230,10 +338,9 @@ def _consumer_loop():
                     "ts": datetime.now(timezone.utc).isoformat(),
                     "msg": err_msg,
                 })
-                # Keep only last 10 errors
                 _state["errors"] = _state["errors"][-10:]
 
-            time.sleep(10)   # retry after 10 s
+            time.sleep(10)
 
 
 def start_consumer():
@@ -250,14 +357,10 @@ def start_consumer():
     logger.info("Kafka consumer thread started")
 
 
-def get_state_snapshot() -> dict:
-    """Return a JSON-serialisable snapshot of the current state.
+# ── Snapshots ─────────────────────────────────────────────────────────────────
 
-    Timestamps from Kafka messages are intentionally excluded from the PC
-    objects to avoid triggering spurious re-renders at 10 Hz. The server-side
-    last_seen_at field is used instead (updated on every message but only
-    pushed via WS when a visual field changes).
-    """
+def get_state_snapshot() -> dict:
+    """Snapshot SalleReporter — état upload des 30 PCs."""
     with _state_lock:
         pcs = []
         for pc_id in range(1, 31):
@@ -293,21 +396,51 @@ def get_state_snapshot() -> dict:
 
             pcs.append(pc)
 
-        # Strip Kafka timestamps from spool/nas before sending — they change
-        # every heartbeat and would cause constant re-renders on the front.
-        spool = _state["spool"]
-        if spool:
-            spool = {k: v for k, v in spool.items() if k != "timestamp"}
-
-        nas = _state["nas"]
-        if nas:
-            nas = {k: v for k, v in nas.items() if k != "timestamp"}
-
         return {
             "connected":   _state["connected"],
             "last_update": _state["last_update"],
             "errors":      list(_state["errors"]),
             "pcs":         pcs,
-            "spool":       spool,
-            "nas":         nas,
+        }
+
+
+def get_stations_snapshot() -> dict:
+    """Snapshot KafkaEventPublisher — état cycle de vie des stations."""
+    now = time.time()
+    with _state_lock:
+        stations = []
+        for st in _stations.values():
+            # Marquer comme déconnectée si silencieuse depuis trop longtemps
+            connected = st["connected"]
+            if connected and st["last_ts"] > 0:
+                if (now - st["last_ts"]) > PRESENCE_TIMEOUT_S:
+                    connected = False
+
+            stations.append({
+                "station_id": st["station_id"],
+                "operator":   st["operator"],
+                "scenario":   st["scenario"],
+                "cameras":    list(st["cameras"]),
+                "pinces":     dict(st["pinces"]),
+                "trackers":   dict(st["trackers"]),
+                "recording":  dict(st["recording"]),
+                "connected":  connected,
+                "last_ts":    st["last_ts"],
+            })
+
+        total = len(stations)
+        connected_count = sum(1 for s in stations if s["connected"])
+        recording_count = sum(1 for s in stations if s["connected"] and s["recording"]["is_recording"])
+
+        return {
+            "connected":   _state["connected"],
+            "last_update": _state["last_update"],
+            "errors":      list(_state["errors"]),
+            "stats": {
+                "total":      total,
+                "connected":  connected_count,
+                "recording":  recording_count,
+                "disconnected": total - connected_count,
+            },
+            "stations": stations,
         }

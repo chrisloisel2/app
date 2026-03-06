@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 
-// ── Palette (matches tkinter app) ──────────────────────────────────────────
+// ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
   bg:          "#0d0e1a",
   bgSurface:   "#12141f",
@@ -16,7 +16,6 @@ const C = {
   textDim:     "#6870a0",
   textMuted:   "#404468",
   accent:      "#7c6fff",
-  accentGlow:  "#5046d6",
   ok:          "#22d47e",
   okBg:        "#0a2018",
   okBorder:    "#174830",
@@ -30,74 +29,56 @@ const C = {
   greyBg:      "#0e1020",
   greyBorder:  "#1e2240",
   rec:         "#ff3f3f",
-  recDim:      "#3a1a1a",
 };
 
-const FG = { green: C.ok, orange: C.warn, red: C.error, grey: C.grey };
-const BG = { green: C.okBg, orange: C.warnBg, red: C.errorBg, grey: C.greyBg };
+const FG = { ok: "#22d47e", warn: "#f9a825", error: "#ff5555", grey: "#4a5278" };
+const BG = { ok: "#0a2018", warn: "#1e1800", error: "#1e0808", grey: "#0e1020" };
 
 const ALERT_TIMEOUT_S = 120;
 
-// ── Column definitions ──────────────────────────────────────────────────────
+// ── Column definitions ────────────────────────────────────────────────────────
 const COLUMNS = [
-  { key: "id",       label: "ID",        w: "7rem",  align: "center" },
-  { key: "operator", label: "Opérateur", w: "9rem",  align: "left"   },
-  { key: "scenario", label: "Scénario",  w: "11rem", align: "left"   },
-  { key: "tr_state", label: "Tracker D", w: "8rem",  align: "center" },
-  { key: "tr_value", label: "Val",       w: "4.5rem",align: "center" },
-  { key: "tl_state", label: "Tracker G", w: "8rem",  align: "center" },
-  { key: "tl_value", label: "Val",       w: "4.5rem",align: "center" },
-  { key: "th_state", label: "Tête",      w: "8rem",  align: "center" },
-  { key: "th_value", label: "Val",       w: "4.5rem",align: "center" },
-  { key: "pd",       label: "PinD",      w: "3.5rem",align: "center" },
-  { key: "pg",       label: "PinG",      w: "3.5rem",align: "center" },
-  { key: "c1",       label: "C1",        w: "3rem",  align: "center" },
-  { key: "c2",       label: "C2",        w: "3rem",  align: "center" },
-  { key: "c3",       label: "C3",        w: "3rem",  align: "center" },
-  { key: "rec",      label: "REC",       w: "6rem",  align: "center" },
-  { key: "duration", label: "Durée",     w: "5rem",  align: "center" },
-  { key: "ts",       label: "MAJ",       w: "6rem",  align: "center" },
+  { key: "station",    label: "Station",      w: "8rem",  align: "left"   },
+  { key: "operator",   label: "Opérateur",    w: "9rem",  align: "left"   },
+  { key: "scenario",   label: "Scénario",     w: "11rem", align: "left"   },
+  { key: "cameras",    label: "Caméras",      w: "6rem",  align: "center" },
+  { key: "pince_r",    label: "PinD",         w: "4rem",  align: "center" },
+  { key: "pince_l",    label: "PinG",         w: "4rem",  align: "center" },
+  { key: "trackers",   label: "Trackers",     w: "10rem", align: "center" },
+  { key: "rec",        label: "REC",          w: "5rem",  align: "center" },
+  { key: "duration",   label: "Durée",        w: "5rem",  align: "center" },
+  { key: "ts",         label: "MAJ",          w: "6rem",  align: "center" },
 ];
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-function trackerColor(tracker, connected) {
-  if (!connected || tracker.state === "DISCONNECTED") return "grey";
-  if (tracker.state === "ERROR") return "red";
-  if (tracker.state === "WARN")  return "orange";
-  if (tracker.state === "OK")    return "green";
-  return "grey";
-}
-
-function connColor(connected, indConnected) {
-  if (!indConnected) return "grey";
-  return connected ? "green" : "red";
-}
-
-function recordingColor(rec, connected) {
-  if (!connected) return "grey";
-  const now = Date.now() / 1000;
-  if (rec.is_recording) {
-    if (rec.last_start_ts > 0 && (now - rec.last_start_ts) > ALERT_TIMEOUT_S) return "orange";
-    return "green";
-  }
-  if (rec.last_activity_ts > 0 && (now - rec.last_activity_ts) > ALERT_TIMEOUT_S) return "orange";
-  return "grey";
-}
-
-function trackerSym(state) {
-  return { OK: "●", WARN: "▲", ERROR: "●", DISCONNECTED: "○" }[state] ?? "?";
-}
-
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function formatTs(ts) {
   if (!ts || ts === 0) return "--:--:--";
   return new Date(ts * 1000).toLocaleTimeString("fr-FR");
 }
 
 function fmtDuration(s) {
+  if (!s || s === 0) return "—";
   return `${Number(s).toFixed(1)}s`;
 }
 
-// ── StatCard ─────────────────────────────────────────────────────────────────
+function connDot(connected) {
+  return connected
+    ? <span style={{ color: FG.ok }}>●</span>
+    : <span style={{ color: FG.grey }}>○</span>;
+}
+
+function recordingColor(rec, connected) {
+  if (!connected) return "grey";
+  const now = Date.now() / 1000;
+  if (rec.is_recording) {
+    if (rec.last_start_ts > 0 && (now - rec.last_start_ts) > ALERT_TIMEOUT_S) return "warn";
+    return "ok";
+  }
+  if (rec.last_activity_ts > 0 && (now - rec.last_activity_ts) > ALERT_TIMEOUT_S) return "warn";
+  return "grey";
+}
+
+// ── StatCard ──────────────────────────────────────────────────────────────────
 function StatCard({ icon, label, value, accent }) {
   return (
     <div style={{
@@ -124,8 +105,8 @@ function StatCard({ icon, label, value, accent }) {
   );
 }
 
-// ── TrackerCell ──────────────────────────────────────────────────────────────
-function Cell({ text, fg, bg, align = "center", style = {} }) {
+// ── Cell ──────────────────────────────────────────────────────────────────────
+function Cell({ children, fg, bg, align = "center", style = {} }) {
   return (
     <td style={{
       color: fg || C.text,
@@ -134,68 +115,110 @@ function Cell({ text, fg, bg, align = "center", style = {} }) {
       fontFamily: "monospace",
       fontSize: 12,
       fontWeight: 600,
-      padding: "6px 4px",
+      padding: "6px 6px",
       borderRight: `1px solid ${C.border}`,
       whiteSpace: "nowrap",
       ...style,
     }}>
-      {text}
+      {children}
     </td>
   );
 }
 
-// ── IndividualRow ─────────────────────────────────────────────────────────────
-function IndividualRow({ ind, rowIndex }) {
+// ── TrackersSummary ───────────────────────────────────────────────────────────
+function TrackersSummary({ trackers, connected }) {
+  const list = Object.values(trackers || {});
+  if (!connected || list.length === 0) {
+    return <span style={{ color: C.grey }}>—</span>;
+  }
+  return (
+    <span style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
+      {list.map((t) => {
+        const col = !t.tracking ? FG.warn : (t.battery !== undefined && t.battery < 0.05 ? FG.error : FG.ok);
+        const label = `T${t.idx}`;
+        const title = [
+          t.serial,
+          t.tracking ? "tracking OK" : "tracking PERDU",
+          t.battery !== undefined ? `bat ${Math.round(t.battery * 100)}%` : null,
+        ].filter(Boolean).join(" · ");
+        return (
+          <span key={t.idx} title={title} style={{ color: col, fontSize: 11 }}>
+            {t.tracking ? "●" : "▲"}{label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+// ── StationRow ────────────────────────────────────────────────────────────────
+function StationRow({ station, rowIndex }) {
   const bg = rowIndex % 2 === 0 ? C.bgRow : C.bgRowAlt;
-
-  const tr = ind.tracker_right;
-  const tl = ind.tracker_left;
-  const th = ind.tracker_head;
-
-  const trCol = trackerColor(tr, ind.connected);
-  const tlCol = trackerColor(tl, ind.connected);
-  const thCol = trackerColor(th, ind.connected);
-
-  const pdCol = connColor(ind.pince_droite?.connected, ind.connected);
-  const pgCol = connColor(ind.pince_gauche?.connected, ind.connected);
-  const c1Col = connColor(ind.camera1?.connected, ind.connected);
-  const c2Col = connColor(ind.camera2?.connected, ind.connected);
-  const c3Col = connColor(ind.camera3?.connected, ind.connected);
-
-  const rc = recordingColor(ind.recording, ind.connected);
-  const recSym = ind.recording?.is_recording ? "⏺ REC" : "⏹ OFF";
+  const rc = recordingColor(station.recording, station.connected);
+  const recSym = station.recording?.is_recording ? "⏺ REC" : "⏹ OFF";
+  const cameras = station.cameras || [];
+  const matchedCams = cameras.filter(c => c.db_match).length;
 
   return (
-    <tr style={{ background: bg }}>
-      <Cell text={ind.id}           fg={C.accent}   bg={bg}  align="center" />
-      <Cell text={ind.operator||"—"} fg={C.text}    bg={bg}  align="left"   />
-      <Cell text={ind.scenario||"—"} fg={C.textDim} bg={bg}  align="left"   />
+    <tr style={{ background: bg, opacity: station.connected ? 1 : 0.5 }}>
+      <Cell fg={C.accent} bg={bg} align="left">
+        {station.station_id}
+      </Cell>
+      <Cell fg={C.text} bg={bg} align="left">
+        {station.operator || "—"}
+      </Cell>
+      <Cell fg={C.textDim} bg={bg} align="left">
+        {station.scenario || "—"}
+      </Cell>
 
-      <Cell text={`${trackerSym(tr.state)} ${tr.state}`} fg={FG[trCol]} bg={BG[trCol]} />
-      <Cell text={Number(tr.value).toFixed(2)}           fg={FG[trCol]} bg={BG[trCol]} />
-      <Cell text={`${trackerSym(tl.state)} ${tl.state}`} fg={FG[tlCol]} bg={BG[tlCol]} />
-      <Cell text={Number(tl.value).toFixed(2)}           fg={FG[tlCol]} bg={BG[tlCol]} />
-      <Cell text={`${trackerSym(th.state)} ${th.state}`} fg={FG[thCol]} bg={BG[thCol]} />
-      <Cell text={Number(th.value).toFixed(2)}           fg={FG[thCol]} bg={BG[thCol]} />
+      {/* Caméras */}
+      <Cell bg={bg}>
+        {cameras.length > 0
+          ? <span style={{ color: matchedCams === cameras.length ? FG.ok : FG.warn }}>
+              {matchedCams}/{cameras.length}
+            </span>
+          : <span style={{ color: C.grey }}>—</span>
+        }
+      </Cell>
 
-      <Cell text={ind.pince_droite?.connected ? "●" : "○"} fg={FG[pdCol]} bg={BG[pdCol]} />
-      <Cell text={ind.pince_gauche?.connected ? "●" : "○"} fg={FG[pgCol]} bg={BG[pgCol]} />
-      <Cell text={ind.camera1?.connected ? "●" : "○"} fg={FG[c1Col]} bg={BG[c1Col]} />
-      <Cell text={ind.camera2?.connected ? "●" : "○"} fg={FG[c2Col]} bg={BG[c2Col]} />
-      <Cell text={ind.camera3?.connected ? "●" : "○"} fg={FG[c3Col]} bg={BG[c3Col]} />
+      {/* Pince droite */}
+      <Cell bg={station.pinces?.right?.connected ? BG.ok : BG.grey}>
+        {connDot(station.pinces?.right?.connected)}
+      </Cell>
 
-      <Cell text={recSym}                        fg={FG[rc]} bg={BG[rc]} />
-      <Cell text={fmtDuration(ind.recording?.duration_s ?? 0)} fg={FG[rc]} bg={BG[rc]} />
-      <Cell text={formatTs(ind.last_ts)} fg={C.textDim} bg={bg} />
+      {/* Pince gauche */}
+      <Cell bg={station.pinces?.left?.connected ? BG.ok : BG.grey}>
+        {connDot(station.pinces?.left?.connected)}
+      </Cell>
+
+      {/* Trackers */}
+      <Cell bg={bg}>
+        <TrackersSummary trackers={station.trackers} connected={station.connected} />
+      </Cell>
+
+      {/* REC */}
+      <Cell fg={FG[rc]} bg={BG[rc]}>
+        {recSym}
+      </Cell>
+
+      {/* Durée */}
+      <Cell fg={FG[rc]} bg={BG[rc]}>
+        {fmtDuration(station.recording?.duration_s)}
+      </Cell>
+
+      {/* MAJ */}
+      <Cell fg={C.textDim} bg={bg}>
+        {formatTs(station.last_ts)}
+      </Cell>
     </tr>
   );
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function OrchestrateurPage() {
-  const [data, setData]       = useState(null);
-  const [clock, setClock]     = useState("");
-  const [blink, setBlink]     = useState(true);
+  const [data, setData]             = useState(null);
+  const [clock, setClock]           = useState("");
+  const [blink, setBlink]           = useState(true);
   const [kafkaStatus, setKafkaStatus] = useState("connecting");
   const intervalRef = useRef(null);
 
@@ -230,11 +253,11 @@ export default function OrchestrateurPage() {
     return () => clearInterval(intervalRef.current);
   }, [fetchData]);
 
-  const stats   = data?.stats    ?? { total: 0, ok: 0, warn: 0, error: 0, recording: 0, disconnected: 0 };
-  const inds    = data?.individuals ?? [];
+  const stats    = data?.stats    ?? { total: 0, connected: 0, recording: 0, disconnected: 0 };
+  const stations = data?.stations ?? [];
 
   const statusLabel = {
-    connected:    `✓  192.168.88.4:9092  [topic1]`,
+    connected:    `✓  192.168.88.4:9092  [topic2]`,
     disconnected: `—  192.168.88.4:9092  Déconnecté`,
     error:        `⚠  192.168.88.4:9092  Erreur`,
     connecting:   `… Connexion…`,
@@ -255,53 +278,39 @@ export default function OrchestrateurPage() {
           <span style={{ color: C.textDim, fontFamily: "monospace", fontSize: 14 }}>{clock}</span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {/* Kafka indicator */}
+        <div style={{
+          background: C.bgCard,
+          border: `1px solid ${C.border}`,
+          borderRadius: 4,
+          padding: "6px 12px",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
           <div style={{
-            background: C.bgCard,
-            border: `1px solid ${C.border}`,
-            borderRadius: 4,
-            padding: "6px 12px",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: "50%",
-              background: blink && kafkaStatus === "connected" ? C.ok : C.bgCard,
-              transition: "background 0.2s",
-            }} />
-            <span style={{ color: C.textDim, fontSize: 12 }}>{statusLabel}</span>
-          </div>
+            width: 8, height: 8, borderRadius: "50%",
+            background: blink && kafkaStatus === "connected" ? C.ok : C.bgCard,
+            transition: "background 0.2s",
+          }} />
+          <span style={{ color: C.textDim, fontSize: 12 }}>{statusLabel}</span>
         </div>
       </div>
 
       {/* Stats bar */}
       <div style={{ padding: "20px 24px 0", display: "flex", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
-        <StatCard icon="▣" label="Individus"       value={stats.total}      accent={C.accent} />
-        <StatCard icon="●" label="OK"               value={stats.ok}         accent={C.ok}     />
-        <StatCard icon="▲" label="Alertes"          value={stats.warn}       accent={C.warn}   />
-        <StatCard icon="●" label="Erreurs"          value={stats.error}      accent={C.error}  />
-        <StatCard icon="⏺" label="Enregistrements" value={stats.recording}  accent={C.rec}    />
-        <StatCard icon="○" label="Déconnectés"      value={stats.disconnected} accent={C.grey} />
+        <StatCard icon="▣" label="Stations"        value={stats.total}        accent={C.accent} />
+        <StatCard icon="●" label="Connectées"       value={stats.connected}    accent={C.ok}     />
+        <StatCard icon="⏺" label="Enregistrements" value={stats.recording}    accent={C.rec}    />
+        <StatCard icon="○" label="Déconnectées"     value={stats.disconnected} accent={C.grey}   />
       </div>
 
-      {/* Table section */}
+      {/* Table */}
       <div style={{ padding: "18px 24px 20px", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-        {/* Section header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 30 }}>
-            <span style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Individus en temps réel</span>
-            <span style={{ display: "flex", gap: 12 }}>
-              {[["●", "OK", C.ok], ["▲", "Warning", C.warn], ["●", "Erreur", C.error], ["○", "Déconnecté", C.grey]].map(([sym, lbl, col]) => (
-                <span key={lbl} style={{ color: col, fontSize: 11 }}>{sym} {lbl}</span>
-              ))}
-            </span>
-          </div>
-          <span style={{ color: C.textDim, fontSize: 11 }}>{inds.length} connectés</span>
+          <span style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Stations en temps réel</span>
+          <span style={{ color: C.textDim, fontSize: 11 }}>{stations.length} station(s)</span>
         </div>
 
-        {/* Table container */}
         <div style={{
           flex: 1,
           border: `1px solid ${C.border}`,
@@ -314,14 +323,9 @@ export default function OrchestrateurPage() {
         }}>
           <div style={{ overflowX: "auto", overflowY: "auto", flex: 1 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-              {/* Column widths */}
               <colgroup>
-                {COLUMNS.map(col => (
-                  <col key={col.key} style={{ width: col.w }} />
-                ))}
+                {COLUMNS.map(col => <col key={col.key} style={{ width: col.w }} />)}
               </colgroup>
-
-              {/* Header */}
               <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
                 <tr style={{ background: C.bgHeader }}>
                   {COLUMNS.map(col => (
@@ -342,10 +346,8 @@ export default function OrchestrateurPage() {
                   ))}
                 </tr>
               </thead>
-
-              {/* Body */}
               <tbody>
-                {inds.length === 0 ? (
+                {stations.length === 0 ? (
                   <tr>
                     <td colSpan={COLUMNS.length} style={{
                       textAlign: "center",
@@ -353,12 +355,14 @@ export default function OrchestrateurPage() {
                       padding: "60px 0",
                       fontSize: 13,
                     }}>
-                      {kafkaStatus === "connecting" ? "Connexion au broker Kafka…" : "En attente de données (topic1)…"}
+                      {kafkaStatus === "connecting"
+                        ? "Connexion au broker Kafka…"
+                        : "En attente d'événements KafkaEventPublisher (topic2)…"}
                     </td>
                   </tr>
                 ) : (
-                  inds.map((ind, i) => (
-                    <IndividualRow key={ind.id} ind={ind} rowIndex={i} />
+                  stations.map((st, i) => (
+                    <StationRow key={st.station_id} station={st} rowIndex={i} />
                   ))
                 )}
               </tbody>

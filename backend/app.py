@@ -117,12 +117,6 @@ except Exception:
     logger.critical("FAILED to import kafka_consumer:\n%s", traceback.format_exc())
     sys.exit(1)
 
-try:
-    from orchestrateur_consumer import start_orchestrateur_consumer
-    logger.info("orchestrateur_consumer imported OK")
-except Exception:
-    logger.critical("FAILED to import orchestrateur_consumer:\n%s", traceback.format_exc())
-    sys.exit(1)
 
 try:
     from flask_sock import Sock
@@ -168,9 +162,8 @@ register_ws_route(sock)
 
 logger.info("=== Blueprints registered — app ready ===")
 
-# Start Kafka consumer background threads
+# Start Kafka consumer background thread (topic2 — SalleReporter + KafkaEventPublisher)
 start_consumer()
-start_orchestrateur_consumer()
 
 
 @app.route("/api/health", methods=["GET"])
