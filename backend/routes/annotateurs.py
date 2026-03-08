@@ -108,10 +108,13 @@ def create_annotateur():
         if col.find_one({"username": nom_utilisateur}):
             return _err("Ce nom d'utilisateur existe déjà", 409)
 
+        import datetime
         doc = {
             "numero_poste": numero_poste,
             "username": nom_utilisateur,
             "password": mdp,
+            "email": "",
+            "created_at": datetime.datetime.now(datetime.timezone.utc),
         }
         result = col.insert_one(doc)
         inserted = col.find_one({"_id": result.inserted_id}, {"password": 0})
