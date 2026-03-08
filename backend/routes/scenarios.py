@@ -19,6 +19,13 @@ _mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
 _db    = _mongo[DB_NAME]
 _col   = _db["scenarios"]
 
+# Supprimer le JSON Schema validator hérité (schéma incompatible avec notre modèle)
+try:
+    _db.command("collMod", "scenarios", validator={}, validationLevel="off")
+    logger.info("JSON Schema validator supprimé sur la collection scenarios")
+except Exception:
+    logger.debug("collMod scenarios: pas de validator à supprimer ou droits insuffisants")
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,12 +40,20 @@ def _err(message, status=400):
     return jsonify({"ok": False, "error": message}), status
 
 
-def _now():
-    return datetime.now(timezone.utc).isoformat()
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _ser(doc):
-    return {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+    out = {}
+    for k, v in doc.items():
+        if isinstance(v, ObjectId):
+            out[k] = str(v)
+        elif isinstance(v, datetime):
+            out[k] = v.isoformat()
+        else:
+            out[k] = v
+    return out
 
 
 def _body():
