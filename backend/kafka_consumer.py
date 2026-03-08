@@ -1,33 +1,22 @@
 """
 Kafka consumer for topic2 (KAFKA_SALLE_TOPIC).
 
-Deux producteurs publient sur ce topic unique :
+KafkaEventPublisher — messages plats (tous les champs au niveau racine) :
+  {
+    "type": "<event_type>", "station_id": "PC-03", "ts": 1741234567.123,
+    "operator": "alice", "scenario": "scenario-A",
+    ... champs spécifiques à l'événement ...
+  }
 
-1. SalleReporter (10 Hz) — état upload du poste
-   Discriminant : champ racine "source" == "pc"
-   {
-     "source": "pc", "pc_id": 3, "hostname": "PC-03",
-     "timestamp": "...", "operator_username": "alice",
-     "is_recording": true, "has_alert": false,
-     "sqlite_queue": { "pending_sessions": 2, "total_records": 1847,
-                       "oldest_pending_iso": "...", "sessions": [...] },
-     "last_send": { "session_id": "...", "sent_at": "...",
-                    "status": "success", "records_sent": 1203 }
-   }
-   Message de déconnexion : { "source": "pc", "pc_id": 3, "disconnected": true, "ts": ... }
-
-2. KafkaEventPublisher (événementiel) — changements d'état cycle de vie
-   Discriminant : champ racine "type" présent
-   {
-     "type": "<event_type>", "station_id": "PC-03", "ts": 1741234567.123,
-     "operator": "alice", "scenario": "scenario-A", "payload": { ... }
-   }
-   Types d'événements : operator_connected, app_closed,
-     cameras_detected, pince_connected, pince_disconnected,
-     pince_switch_on, pince_switch_off, session_failed,
-     tracker_connected, tracker_disconnected, tracker_lost,
-     tracker_recovered, tracker_low_battery, tracker_critical_battery,
-     recording_started, recording_stopped
+Types d'événements :
+  operator_connected, app_closed, station_disconnected, station_alert,
+  cameras_detected,
+  gripper_connected, gripper_disconnected, gripper_switch_on, gripper_switch_off,
+  session_failed,
+  tracker_connected, tracker_disconnected, tracker_lost,
+  tracker_recovered, tracker_low_battery, tracker_critical_battery,
+  recording_started, recording_stopped,
+  upload_queued, upload_started, upload_completed, upload_failed
 """
 
 import json
@@ -144,29 +133,32 @@ def _handle_salle_reporter(msg: dict, now: str):
 def _default_station(station_id: str) -> dict:
     return {
         "station_id": station_id,
-        "operator": "",
-        "scenario": "",
-        "cameras": [],
-        "pinces": {
+        "operator":   "",
+        "scenario":   "",
+        "alert":      False,
+        "cameras":    [],
+        "grippers": {
             "left":  {"connected": False, "port": None},
             "right": {"connected": False, "port": None},
         },
         "trackers": {},   # idx (str) -> {idx, serial, tracking, battery}
         "recording": {
             "is_recording": False,
-            "duration_s": 0.0,
-            "trigger": None,
-            "failed": False,
-            "last_start_ts": 0.0,
+            "duration_s":   0.0,
+            "trigger":      None,
+            "failed":       False,
+            "last_start_ts":    0.0,
             "last_activity_ts": 0.0,
         },
+        "upload": None,   # None ou {status, session_id, ...}
         "connected": True,
-        "last_ts": 0.0,
+        "last_ts":   0.0,
     }
 
 
 def _handle_event(msg: dict) -> bool:
     """Process a KafkaEventPublisher message (has 'type' field).
+    All fields are at root level (flat format per kafka_norme.md).
     Returns True if state changed (triggers WS push).
     """
     event_type = msg.get("type", "")
@@ -174,8 +166,7 @@ def _handle_event(msg: dict) -> bool:
     if not station_id:
         return False
 
-    payload = msg.get("payload") or {}
-    ts = float(msg.get("ts", time.time()))
+    ts       = float(msg.get("ts", time.time()))
     operator = str(msg.get("operator", ""))
     scenario = str(msg.get("scenario", ""))
 
@@ -188,25 +179,28 @@ def _handle_event(msg: dict) -> bool:
 
     if event_type == "operator_connected":
         st["connected"] = True
-        st["operator"] = payload.get("operator", operator)
-        st["scenario"] = payload.get("scenario", scenario)
+        st["operator"] = operator
+        st["scenario"] = scenario
 
-    elif event_type == "app_closed":
+    elif event_type in ("app_closed", "station_disconnected"):
         st["connected"] = False
         st["recording"]["is_recording"] = False
 
+    elif event_type == "station_alert":
+        st["alert"] = bool(msg.get("active", False))
+
     elif event_type == "cameras_detected":
-        st["cameras"] = payload.get("cameras", [])
+        st["cameras"] = msg.get("cameras", [])
 
-    elif event_type == "pince_connected":
-        side = payload.get("side", "right")
-        st["pinces"][side] = {"connected": True, "port": payload.get("port")}
+    elif event_type == "gripper_connected":
+        side = msg.get("side", "right")
+        st["grippers"][side] = {"connected": True, "port": msg.get("port")}
 
-    elif event_type == "pince_disconnected":
-        side = payload.get("side", "right")
-        st["pinces"][side] = {"connected": False, "port": None}
+    elif event_type == "gripper_disconnected":
+        side = msg.get("side", "right")
+        st["grippers"][side] = {"connected": False, "port": None}
 
-    elif event_type in ("pince_switch_on", "pince_switch_off"):
+    elif event_type in ("gripper_switch_on", "gripper_switch_off"):
         # Informational only — no persistent state change needed
         pass
 
@@ -214,36 +208,36 @@ def _handle_event(msg: dict) -> bool:
         st["recording"]["failed"] = True
 
     elif event_type == "tracker_connected":
-        idx = str(payload.get("idx", ""))
+        idx = str(msg.get("idx", ""))
         st["trackers"][idx] = {
-            "idx": payload.get("idx"),
-            "serial": payload.get("serial", ""),
+            "idx": msg.get("idx"),
+            "serial": msg.get("serial", ""),
             "tracking": True,
             "battery": st["trackers"].get(idx, {}).get("battery", 1.0),
         }
 
     elif event_type == "tracker_disconnected":
-        idx = str(payload.get("idx", ""))
+        idx = str(msg.get("idx", ""))
         st["trackers"].pop(idx, None)
 
     elif event_type == "tracker_lost":
-        idx = str(payload.get("idx", ""))
+        idx = str(msg.get("idx", ""))
         if idx in st["trackers"]:
             st["trackers"][idx]["tracking"] = False
 
     elif event_type == "tracker_recovered":
-        idx = str(payload.get("idx", ""))
+        idx = str(msg.get("idx", ""))
         if idx in st["trackers"]:
             st["trackers"][idx]["tracking"] = True
 
     elif event_type in ("tracker_low_battery", "tracker_critical_battery"):
-        idx = str(payload.get("idx", ""))
-        battery = float(payload.get("battery", 0.0))
+        idx     = str(msg.get("idx", ""))
+        battery = float(msg.get("battery", 0.0))
         if idx in st["trackers"]:
             st["trackers"][idx]["battery"] = battery
         else:
             st["trackers"][idx] = {
-                "idx": payload.get("idx"),
+                "idx": msg.get("idx"),
                 "serial": "",
                 "tracking": False,
                 "battery": battery,
@@ -252,19 +246,49 @@ def _handle_event(msg: dict) -> bool:
     elif event_type == "recording_started":
         now = time.time()
         st["recording"]["is_recording"] = True
-        st["recording"]["trigger"] = payload.get("trigger")
-        st["recording"]["failed"] = False
-        st["recording"]["last_start_ts"] = now
+        st["recording"]["trigger"]      = msg.get("trigger")
+        st["recording"]["failed"]       = False
+        st["recording"]["last_start_ts"]    = now
         st["recording"]["last_activity_ts"] = now
-        st["operator"] = payload.get("operator", operator)
-        st["scenario"] = payload.get("scenario", scenario)
 
     elif event_type == "recording_stopped":
         now = time.time()
         st["recording"]["is_recording"] = False
-        st["recording"]["duration_s"] = float(payload.get("duration_s", 0.0))
-        st["recording"]["failed"] = bool(payload.get("failed", False))
+        st["recording"]["duration_s"]   = float(msg.get("duration_s", 0.0))
+        st["recording"]["failed"]       = bool(msg.get("failed", False))
         st["recording"]["last_activity_ts"] = now
+
+    elif event_type == "upload_queued":
+        st["upload"] = {
+            "status":        "queued",
+            "session_id":    msg.get("session_id"),
+            "pending_count": int(msg.get("pending_count", 0)),
+            "is_failed":     bool(msg.get("is_failed", False)),
+            "error":         None,
+        }
+
+    elif event_type == "upload_started":
+        st["upload"] = {
+            "status":     "sending",
+            "session_id": msg.get("session_id"),
+            "error":      None,
+        }
+
+    elif event_type == "upload_completed":
+        st["upload"] = {
+            "status":     "success",
+            "session_id": msg.get("session_id"),
+            "records":    int(msg.get("records", 0)),
+            "elapsed_s":  float(msg.get("elapsed_s", 0.0)),
+            "error":      None,
+        }
+
+    elif event_type == "upload_failed":
+        st["upload"] = {
+            "status":     "failed",
+            "session_id": msg.get("session_id"),
+            "error":      msg.get("error", ""),
+        }
 
     else:
         logger.debug("KafkaEventPublisher: unknown event type '%s'", event_type)
@@ -420,10 +444,12 @@ def get_stations_snapshot() -> dict:
                 "station_id": st["station_id"],
                 "operator":   st["operator"],
                 "scenario":   st["scenario"],
+                "alert":      bool(st.get("alert", False)),
                 "cameras":    list(st["cameras"]),
-                "pinces":     dict(st["pinces"]),
+                "grippers":   dict(st["grippers"]),
                 "trackers":   dict(st["trackers"]),
                 "recording":  dict(st["recording"]),
+                "upload":     dict(st["upload"]) if st.get("upload") else None,
                 "connected":  connected,
                 "last_ts":    st["last_ts"],
             })
