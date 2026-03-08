@@ -3,7 +3,7 @@ import threading
 
 from flask import Blueprint, jsonify
 
-from kafka_consumer import get_state_snapshot
+from kafka_consumer import get_stations_snapshot
 
 salle_bp = Blueprint("salle", __name__)
 
@@ -14,7 +14,7 @@ _clients_lock = threading.Lock()
 
 def notify_ws():
     """Push a fresh snapshot to all connected WebSocket clients."""
-    snapshot = json.dumps(get_state_snapshot())
+    snapshot = json.dumps(get_stations_snapshot())
     with _clients_lock:
         dead = set()
         for ws in _clients:
@@ -31,7 +31,7 @@ def register_ws_route(sock):
     @sock.route("/api/salle/ws")
     def salle_ws(ws):
         # Send current snapshot immediately on connect
-        ws.send(json.dumps(get_state_snapshot()))
+        ws.send(json.dumps(get_stations_snapshot()))
         with _clients_lock:
             _clients.add(ws)
         try:
@@ -49,4 +49,4 @@ def register_ws_route(sock):
 # ── REST fallback ─────────────────────────────────────────────────────────────
 @salle_bp.get("/api/salle")
 def salle():
-    return jsonify(get_state_snapshot())
+    return jsonify(get_stations_snapshot())
