@@ -111,6 +111,13 @@ except Exception:
     sys.exit(1)
 
 try:
+    from routes.kafka_logs import kafka_logs_bp, register_ws_route as register_kafka_logs_ws
+    logger.info("routes.kafka_logs imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.kafka_logs:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
     from kafka_consumer import start_consumer
     logger.info("kafka_consumer imported OK")
 except Exception:
@@ -156,9 +163,11 @@ app.register_blueprint(orchestrateur_bp)
 app.register_blueprint(operateurs_bp)
 app.register_blueprint(annotateurs_bp)
 app.register_blueprint(scenarios_bp)
+app.register_blueprint(kafka_logs_bp)
 
 from routes.salle import register_ws_route
 register_ws_route(sock)
+register_kafka_logs_ws(sock)
 
 logger.info("=== Blueprints registered — app ready ===")
 

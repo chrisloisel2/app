@@ -308,6 +308,13 @@ def _process_message(raw_value: bytes):
         logger.warning("Kafka topic2: invalid JSON — %s", e)
         return
 
+    # Broadcast raw message to log viewers
+    try:
+        from routes.kafka_logs import broadcast
+        broadcast("topic2", msg)
+    except Exception:
+        pass
+
     should_notify = False
     now = datetime.now(timezone.utc).isoformat()
 

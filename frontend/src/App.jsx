@@ -12,6 +12,7 @@ import OrchestrateurPage from "./pages/OrchestrateurPage";
 import OperateursPage from "./pages/OperateursPage";
 import AnnotateursPage from "./pages/AnnotateursPage";
 import ScenariosPage from "./pages/ScenariosPage";
+import KafkaLogsPage from "./pages/KafkaLogsPage";
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
               <Route path="/operateurs"          element={<OperateursPage />} />
               <Route path="/annotateurs"         element={<AnnotateursPage />} />
               <Route path="/scenarios"           element={<ScenariosPage />} />
+              <Route path="/kafka-logs"          element={<KafkaLogsPage />} />
             </Routes>
           </main>
         </div>

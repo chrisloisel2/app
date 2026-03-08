@@ -85,6 +85,12 @@ export default function Sidebar() {
           >
             <span>◎</span> Orchestrateur
           </NavLink>
+          <NavLink
+            to="/kafka-logs"
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}
+          >
+            <span>⬡</span> Kafka Logs
+          </NavLink>
         </div>
 
         {/* DATA EXPLORER */}
