@@ -145,12 +145,12 @@ def create_scenario():
     except ValueError as e:
         logger.exception("VALUE ERROR create_scenario")
         return _err(str(e), 400)
-    except PyMongoError:
+    except PyMongoError as e:
         logger.exception("PYMONGO ERROR create_scenario")
-        return _err("Erreur base de données", 500)
-    except Exception:
+        return _err(f"Erreur MongoDB : {type(e).__name__}: {e}", 500)
+    except Exception as e:
         logger.exception("UNHANDLED create_scenario")
-        return _err("Erreur interne serveur", 500)
+        return _err(f"Erreur inattendue : {type(e).__name__}: {e}", 500)
 
 
 @scenarios_bp.route("/api/scenarios/<sid>", methods=["GET"])
