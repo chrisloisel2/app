@@ -41,28 +41,59 @@ def get_scenario(sid):
     return jsonify(_ser(doc))
 
 
+def _parse_duree(value) -> int:
+    """Convertit n'importe quelle valeur raisonnable en int, retourne 0 si invalide."""
+    if value is None or value == "":
+        return 0
+    try:
+        return int(float(str(value)))
+    except (TypeError, ValueError):
+        raise ValueError(f"'duree_min' invalide : {value!r}")
+
+
+def _parse_actif(value, default: bool = True) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "on")
+    return default
+
+
 @scenarios_bp.route("/api/scenarios", methods=["POST"])
 def create_scenario():
-    body = request.get_json(silent=True) or {}
-    nom = (body.get("nom") or "").strip()
-    if not nom:
-        return jsonify({"error": "Le champ 'nom' est requis"}), 400
+    try:
+        body = request.get_json(silent=True) or {}
+        logger.debug("POST /api/scenarios payload=%s", body)
 
-    if _col.find_one({"nom": nom}):
-        return jsonify({"error": "Un scénario avec ce nom existe déjà"}), 409
+        nom = str(body.get("nom") or "").strip()
+        if not nom:
+            return jsonify({"error": "Le champ 'nom' est requis"}), 400
 
-    now = datetime.utcnow().isoformat()
-    doc = {
-        "nom":         nom,
-        "description": (body.get("description") or "").strip(),
-        "duree_min":   int(body.get("duree_min") or 0),
-        "actif":       bool(body.get("actif", True)),
-        "created_at":  now,
-        "updated_at":  now,
-    }
-    result = _col.insert_one(doc)
-    doc["_id"] = str(result.inserted_id)
-    return jsonify({"inserted_id": doc["_id"]}), 201
+        if _col.find_one({"nom": nom}):
+            return jsonify({"error": "Un scénario avec ce nom existe déjà"}), 409
+
+        try:
+            duree_min = _parse_duree(body.get("duree_min"))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+        now = datetime.utcnow().isoformat()
+        doc = {
+            "nom":         nom,
+            "description": str(body.get("description") or "").strip(),
+            "duree_min":   duree_min,
+            "actif":       _parse_actif(body.get("actif", True)),
+            "created_at":  now,
+            "updated_at":  now,
+        }
+        result = _col.insert_one(doc)
+        return jsonify({"inserted_id": str(result.inserted_id)}), 201
+
+    except Exception:
+        logger.exception("Erreur create_scenario")
+        return jsonify({"error": "Erreur interne serveur"}), 500
 
 
 @scenarios_bp.route("/api/scenarios/<sid>", methods=["PUT"])
@@ -75,24 +106,36 @@ def update_scenario(sid):
     if not _col.find_one({"_id": oid}):
         return jsonify({"error": "scénario introuvable"}), 404
 
-    body   = request.get_json(silent=True) or {}
-    update = {"updated_at": datetime.utcnow().isoformat()}
+    try:
+        body   = request.get_json(silent=True) or {}
+        update = {"updated_at": datetime.utcnow().isoformat()}
 
-    if "nom" in body and body["nom"].strip():
-        existing = _col.find_one({"nom": body["nom"].strip(), "_id": {"$ne": oid}})
-        if existing:
-            return jsonify({"error": "Ce nom est déjà utilisé par un autre scénario"}), 409
-        update["nom"] = body["nom"].strip()
+        if "nom" in body:
+            nom = str(body["nom"] or "").strip()
+            if nom:
+                existing = _col.find_one({"nom": nom, "_id": {"$ne": oid}})
+                if existing:
+                    return jsonify({"error": "Ce nom est déjà utilisé par un autre scénario"}), 409
+                update["nom"] = nom
 
-    if "description" in body:
-        update["description"] = (body["description"] or "").strip()
-    if "duree_min" in body:
-        update["duree_min"] = int(body["duree_min"] or 0)
-    if "actif" in body:
-        update["actif"] = bool(body["actif"])
+        if "description" in body:
+            update["description"] = str(body["description"] or "").strip()
 
-    _col.update_one({"_id": oid}, {"$set": update})
-    return jsonify({"updated": True})
+        if "duree_min" in body:
+            try:
+                update["duree_min"] = _parse_duree(body["duree_min"])
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
+
+        if "actif" in body:
+            update["actif"] = _parse_actif(body["actif"])
+
+        _col.update_one({"_id": oid}, {"$set": update})
+        return jsonify({"updated": True})
+
+    except Exception:
+        logger.exception("Erreur update_scenario")
+        return jsonify({"error": "Erreur interne serveur"}), 500
 
 
 @scenarios_bp.route("/api/scenarios/<sid>", methods=["DELETE"])
