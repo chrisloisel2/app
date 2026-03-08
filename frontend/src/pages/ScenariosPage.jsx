@@ -4,8 +4,6 @@ import {
   createScenario,
   updateScenario,
   deleteScenario,
-  publishScenario,
-  fetchRabbitMQStatus,
 } from "../api/client";
 
 const EMPTY_FORM = { nom: "", description: "", duree_min: "", actif: true };
@@ -23,35 +21,11 @@ function Badge({ actif }) {
   );
 }
 
-// ── RabbitMQ status pill ──────────────────────────────────────────────────────
-function RabbitMQStatusBadge({ status }) {
-  if (!status) return null;
-  const ok = status.connected;
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${
-        ok
-          ? "bg-green-50 border-green-200 text-green-700"
-          : "bg-red-50 border-red-200 text-red-600"
-      }`}
-      title={status.error || `Queue: ${status.queue}`}
-    >
-      <span className={`w-2 h-2 rounded-full ${ok ? "bg-green-500" : "bg-red-500"}`} />
-      RabbitMQ {ok ? "connecté" : "déconnecté"}
-      {ok && (
-        <span className="ml-1 text-green-600 font-semibold">{status.messages} msg</span>
-      )}
-    </span>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ScenariosPage() {
-  const [scenarios, setScenarios]   = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(null);
-  const [rmqStatus, setRmqStatus]   = useState(null);
-  const [rmqLoading, setRmqLoading] = useState(false);
+  const [scenarios, setScenarios] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
 
   // modal
   const [modalOpen, setModalOpen]   = useState(false);
@@ -63,10 +37,7 @@ export default function ScenariosPage() {
   // delete confirm
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // publish feedback
-  const [publishFeedback, setPublishFeedback] = useState(null); // { id, ok, msg }
-
-  // ── Loaders ───────────────────────────────────────────────────────────────
+  // ── Loader ────────────────────────────────────────────────────────────────
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -76,18 +47,7 @@ export default function ScenariosPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const loadRmqStatus = useCallback(() => {
-    setRmqLoading(true);
-    fetchRabbitMQStatus()
-      .then((r) => setRmqStatus(r.data))
-      .catch(() => setRmqStatus({ connected: false, error: "Impossible de joindre RabbitMQ" }))
-      .finally(() => setRmqLoading(false));
-  }, []);
-
-  useEffect(() => {
-    load();
-    loadRmqStatus();
-  }, [load, loadRmqStatus]);
+  useEffect(() => { load(); }, [load]);
 
   // ── Modal helpers ─────────────────────────────────────────────────────────
   const openCreate = () => {
@@ -144,18 +104,6 @@ export default function ScenariosPage() {
     }
   };
 
-  const handlePublish = async (s) => {
-    setPublishFeedback(null);
-    try {
-      await publishScenario(s._id);
-      setPublishFeedback({ id: s._id, ok: true, msg: `"${s.nom}" envoyé dans la queue RabbitMQ` });
-      loadRmqStatus();
-    } catch (err) {
-      setPublishFeedback({ id: s._id, ok: false, msg: err.response?.data?.error ?? err.message });
-    }
-    setTimeout(() => setPublishFeedback(null), 4000);
-  };
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6">
@@ -164,66 +112,15 @@ export default function ScenariosPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Scénarios d'enregistrement</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gestion et publication via RabbitMQ</p>
+          <p className="text-sm text-gray-500 mt-0.5">Gestion des scénarios — MongoDB</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={loadRmqStatus}
-            disabled={rmqLoading}
-            className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
-            {rmqLoading ? "…" : "↻ RabbitMQ"}
-          </button>
-          <RabbitMQStatusBadge status={rmqStatus} />
-          <button
-            onClick={openCreate}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Nouveau scénario
-          </button>
-        </div>
-      </div>
-
-      {/* RabbitMQ info card */}
-      {rmqStatus && (
-        <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${
-          rmqStatus.connected
-            ? "bg-green-50 border-green-200 text-green-800"
-            : "bg-red-50 border-red-200 text-red-700"
-        }`}>
-          <span className="text-lg mt-0.5">{rmqStatus.connected ? "🐇" : "⚠️"}</span>
-          <div>
-            {rmqStatus.connected ? (
-              <>
-                <p className="font-medium">RabbitMQ opérationnel</p>
-                <p className="text-xs mt-0.5">
-                  Queue <span className="font-mono font-semibold">{rmqStatus.queue}</span> —{" "}
-                  <span className="font-semibold">{rmqStatus.messages}</span> message(s) en attente
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium">RabbitMQ inaccessible</p>
-                <p className="text-xs mt-0.5">{rmqStatus.error}</p>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Publish feedback toast */}
-      {publishFeedback && (
-        <div
-          className={`rounded-lg px-4 py-3 text-sm font-medium border ${
-            publishFeedback.ok
-              ? "bg-blue-50 border-blue-200 text-blue-700"
-              : "bg-red-50 border-red-200 text-red-700"
-          }`}
+        <button
+          onClick={openCreate}
+          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
-          {publishFeedback.ok ? "✓ " : "✗ "}
-          {publishFeedback.msg}
-        </div>
-      )}
+          + Nouveau scénario
+        </button>
+      </div>
 
       {/* Error banner */}
       {error && (
@@ -273,13 +170,6 @@ export default function ScenariosPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => handlePublish(s)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 border border-orange-200 text-orange-600 hover:bg-orange-100 text-xs font-medium rounded-lg transition-colors"
-                        title="Publier dans la queue RabbitMQ"
-                      >
-                        ▶ Publier
-                      </button>
-                      <button
                         onClick={() => openEdit(s)}
                         className="text-blue-600 hover:text-blue-800 font-medium"
                       >
@@ -309,7 +199,7 @@ export default function ScenariosPage() {
         </div>
       )}
 
-      {/* ── Create / Edit Modal ─────────────────────────────────────────────── */}
+      {/* ── Create / Edit Modal ──────────────────────────────────────────────── */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 space-y-5">
@@ -403,7 +293,7 @@ export default function ScenariosPage() {
         </div>
       )}
 
-      {/* ── Delete Confirm Modal ────────────────────────────────────────────── */}
+      {/* ── Delete Confirm Modal ─────────────────────────────────────────────── */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
