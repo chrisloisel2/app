@@ -54,6 +54,25 @@ _state_lock = threading.Lock()
 _consumer_thread = None
 
 PRESENCE_TIMEOUT_S = 30.0  # station marquée déconnectée si silencieuse > 30 s
+SPOOL_HISTORY_MAX  = 20    # nombre de sessions terminées conservées
+
+# inspect_session state
+# active_sessions: session_id -> {
+#   "session_id", "step", "status", "ts",
+#   "inspection": {"ok": bool|None, "total_checks": int, "errors": []},
+#   "upload": {"file_index": int, "file_total": int, "rel": str,
+#              "speed_mbps": float, "files_uploaded": int, "total_mb": float},
+#   "pipeline_status": str,  # dernière valeur de pipeline/status
+# }
+# history: liste des sessions terminées (pipeline/completed ou nacked), max 20
+_spool = {
+    "active":        {},   # session_id -> dict
+    "history":       [],   # liste chronologique inversée (plus récent en tête)
+    "consumer_ok":   False,
+    "last_ts":       None,
+    "processed_total":  0,
+    "failed_total":     0,
+}
 
 # Champs visuels SalleReporter qui déclenchent une notification WS si changés
 _PC_WATCHED_FIELDS = {
@@ -299,6 +318,132 @@ def _handle_event(msg: dict) -> bool:
     return True
 
 
+# ── inspect_session handler ───────────────────────────────────────────────────
+
+def _handle_inspect_session(msg: dict) -> bool:
+    """Process a message from inspect_session (source == 'inspect_session').
+    Returns True if state changed (triggers WS push).
+    """
+    step       = msg.get("step", "")
+    status     = msg.get("status", "")
+    session_id = msg.get("session_id", "") or ""
+    ts         = float(msg.get("ts", time.time()))
+
+    _spool["last_ts"] = ts
+
+    # ── Consumer lifecycle ────────────────────────────────────────────────────
+    if step == "consumer":
+        if status == "started":
+            _spool["consumer_ok"] = True
+        elif status in ("pipeline_exception",):
+            _spool["consumer_ok"] = True  # still running
+        return True
+
+    if not session_id:
+        return False
+
+    # ── Get or create active session entry ────────────────────────────────────
+    sess = _spool["active"].get(session_id)
+    if sess is None:
+        sess = {
+            "session_id":      session_id,
+            "step":            step,
+            "status":          status,
+            "ts":              ts,
+            "pipeline_status": "",
+            "inspection":      {"ok": None, "total_checks": 0, "failed_checks": [], "errors": []},
+            "upload":          {"file_index": 0, "file_total": 0, "rel": "",
+                                "speed_mbps": 0.0, "files_uploaded": 0,
+                                "total_mb": 0.0, "avg_speed_mbps": 0.0},
+            "metadata":        None,
+        }
+        _spool["active"][session_id] = sess
+
+    sess["step"]   = step
+    sess["status"] = status
+    sess["ts"]     = ts
+
+    # ── Pipeline ──────────────────────────────────────────────────────────────
+    if step == "pipeline":
+        sess["pipeline_status"] = status
+        if status == "inspection_passed":
+            pass
+        elif status == "inspection_failed":
+            sess["inspection"]["ok"]            = False
+            sess["inspection"]["errors"]        = msg.get("errors", [])
+            sess["inspection"]["failed_checks"] = msg.get("failed_checks", [])
+        elif status == "completed":
+            sess["metadata"] = msg.get("metadata")
+            _spool["processed_total"] += 1
+            _finish_session(session_id, "ok")
+            return True
+        elif status in ("upload_failed", "quarantine_upload_failed"):
+            _spool["failed_total"] += 1
+            _finish_session(session_id, "upload_failed")
+            return True
+
+    # ── Inspection ────────────────────────────────────────────────────────────
+    elif step == "inspection":
+        if status == "completed":
+            sess["inspection"]["ok"]            = bool(msg.get("ok", False))
+            sess["inspection"]["total_checks"]  = int(msg.get("total_checks", 0))
+            sess["inspection"]["failed_checks"] = msg.get("failed_checks", [])
+            sess["inspection"]["errors"]        = msg.get("errors", [])
+            sess["metadata"] = msg.get("metadata")
+
+    # ── Upload file progress ──────────────────────────────────────────────────
+    elif step == "upload":
+        if status == "file_start":
+            sess["upload"]["file_index"] = int(msg.get("file_index", 0))
+            sess["upload"]["file_total"] = int(msg.get("file_total", 0))
+            sess["upload"]["rel"]        = msg.get("rel", "")
+        elif status == "file_done":
+            sess["upload"]["file_index"]      = int(msg.get("file_index", 0))
+            sess["upload"]["files_uploaded"]  = int(msg.get("file_index", 0)) + 1
+            sess["upload"]["rel"]             = msg.get("rel", "")
+            sess["upload"]["speed_mbps"]      = float(msg.get("speed_mbps", 0.0))
+        elif status == "completed":
+            sess["upload"]["files_uploaded"]  = int(msg.get("files_uploaded", 0))
+            sess["upload"]["file_total"]      = int(msg.get("files_total", 0))
+            sess["upload"]["total_mb"]        = float(msg.get("total_mb", 0.0))
+            sess["upload"]["avg_speed_mbps"]  = float(msg.get("avg_speed_mbps", 0.0))
+
+    # ── Consumer acked/nacked ─────────────────────────────────────────────────
+    elif step == "consumer":
+        if status == "message_acked":
+            pass  # already handled by pipeline/completed
+        elif status == "message_nacked":
+            _spool["failed_total"] += 1
+            _finish_session(session_id, "failed")
+            return True
+
+    return True
+
+
+def _finish_session(session_id: str, outcome: str):
+    """Move session from active to history."""
+    sess = _spool["active"].pop(session_id, None)
+    if sess is None:
+        return
+    sess["outcome"] = outcome
+    _spool["history"].insert(0, sess)
+    if len(_spool["history"]) > SPOOL_HISTORY_MAX:
+        _spool["history"] = _spool["history"][:SPOOL_HISTORY_MAX]
+
+
+def get_spool_snapshot() -> dict:
+    """Snapshot of inspect_session spool state."""
+    with _state_lock:
+        return {
+            "consumer_ok":      _spool["consumer_ok"],
+            "last_ts":          _spool["last_ts"],
+            "processed_total":  _spool["processed_total"],
+            "failed_total":     _spool["failed_total"],
+            "active":           list(_spool["active"].values()),
+            "history":          list(_spool["history"]),
+        }
+
+
 # ── Message dispatcher ────────────────────────────────────────────────────────
 
 def _process_message(raw_value: bytes):
@@ -324,6 +469,9 @@ def _process_message(raw_value: bytes):
         if "source" in msg and msg["source"] == "pc":
             # SalleReporter — état upload poste
             should_notify = _handle_salle_reporter(msg, now)
+        elif "source" in msg and msg["source"] == "inspect_session":
+            # inspect_session spool — pipeline d'inspection/upload
+            should_notify = _handle_inspect_session(msg)
         elif "type" in msg:
             # KafkaEventPublisher — événement cycle de vie
             should_notify = _handle_event(msg)
@@ -465,6 +613,15 @@ def get_stations_snapshot() -> dict:
         connected_count = sum(1 for s in stations if s["connected"])
         recording_count = sum(1 for s in stations if s["connected"] and s["recording"]["is_recording"])
 
+        spool = {
+            "consumer_ok":     _spool["consumer_ok"],
+            "last_ts":         _spool["last_ts"],
+            "processed_total": _spool["processed_total"],
+            "failed_total":    _spool["failed_total"],
+            "active":          list(_spool["active"].values()),
+            "history":         list(_spool["history"]),
+        }
+
         return {
             "connected":   _state["connected"],
             "last_update": _state["last_update"],
@@ -476,4 +633,5 @@ def get_stations_snapshot() -> dict:
                 "disconnected": total - connected_count,
             },
             "stations": stations,
+            "spool":    spool,
         }

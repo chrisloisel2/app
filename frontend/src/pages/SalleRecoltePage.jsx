@@ -306,6 +306,233 @@ function Legend() {
   );
 }
 
+// ── Spool components ─────────────────────────────────────────────────────────
+
+function spoolPipelineLabel(sess) {
+  const ps = sess.pipeline_status;
+  if (ps === "completed")               return { label: "✓ Complété",          color: "#22c55e" };
+  if (ps === "inspection_failed")       return { label: "✗ Inspection KO",     color: "#ef4444" };
+  if (ps === "upload_failed")           return { label: "✗ Upload KO",         color: "#ef4444" };
+  if (ps === "quarantine_upload_failed")return { label: "✗ Quarantaine KO",    color: "#ef4444" };
+  if (ps === "inspection_passed")       return { label: "✓ Insp. OK → Upload", color: "#f59e0b" };
+  if (sess.step === "upload")           return { label: "⬆ Upload…",           color: "#f59e0b" };
+  if (sess.step === "inspection")       return { label: "🔍 Inspection…",       color: "#6366f1" };
+  if (sess.step === "pipeline")         return { label: "⚙ Pipeline…",         color: "#6366f1" };
+  return                                       { label: sess.step + "/" + sess.status, color: "#64748b" };
+}
+
+function ProgressBar({ pct, color }) {
+  return (
+    <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 3, height: 4, marginTop: 4 }}>
+      <div style={{
+        width: `${Math.min(100, Math.max(0, pct))}%`,
+        height: "100%",
+        background: color ?? "#22d3ee",
+        borderRadius: 3,
+        transition: "width 0.4s",
+        boxShadow: `0 0 6px ${color}66`,
+      }} />
+    </div>
+  );
+}
+
+function ActiveSessionCard({ sess }) {
+  const { label, color } = spoolPipelineLabel(sess);
+  const up = sess.upload;
+  const insp = sess.inspection;
+  const uploadPct = up.file_total > 0
+    ? Math.round((up.files_uploaded / up.file_total) * 100)
+    : 0;
+  const shortId = sess.session_id.replace(/^session_/, "");
+
+  return (
+    <div style={{
+      background: "rgba(6,12,30,0.9)",
+      border: "1px solid rgba(99,102,241,0.25)",
+      borderRadius: 6,
+      padding: "10px 12px",
+      minWidth: 220,
+      flex: "1 1 220px",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ color: "#94a3b8", fontSize: 10, fontFamily: "monospace" }}>{shortId}</span>
+        <span style={{ color, fontSize: 10, fontWeight: 700 }}>{label}</span>
+      </div>
+
+      {/* Inspection */}
+      {insp.total_checks > 0 && (
+        <div style={{ marginBottom: 5 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
+            <span style={{ color: "#475569" }}>Inspection</span>
+            <span style={{ color: insp.ok === false ? "#ef4444" : insp.ok === true ? "#22c55e" : "#f59e0b" }}>
+              {insp.ok === null ? `${insp.total_checks} checks…` : insp.ok ? `${insp.total_checks} checks ✓` : `${insp.failed_checks.length} erreurs`}
+            </span>
+          </div>
+          {insp.ok === false && insp.errors.slice(0, 2).map((e, i) => (
+            <div key={i} style={{ color: "#f87171", fontSize: 9, fontFamily: "monospace", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {e}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload progress */}
+      {up.file_total > 0 && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
+            <span style={{ color: "#475569" }}>
+              {up.rel ? (
+                <span style={{ fontFamily: "monospace", color: "#64748b", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom" }}>
+                  {up.rel.split("/").pop()}
+                </span>
+              ) : "Upload"}
+            </span>
+            <span style={{ color: "#f59e0b" }}>
+              {up.files_uploaded}/{up.file_total}
+              {up.speed_mbps > 0 && <span style={{ color: "#64748b" }}> · {up.speed_mbps.toFixed(1)} Mb/s</span>}
+            </span>
+          </div>
+          <ProgressBar pct={uploadPct} color="#f59e0b" />
+        </div>
+      )}
+
+      {/* Metadata */}
+      {sess.metadata && (
+        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {sess.metadata.scenario && (
+            <span style={{ color: "#6366f1", fontSize: 9 }}>{sess.metadata.scenario}</span>
+          )}
+          {sess.metadata.duration_seconds != null && (
+            <span style={{ color: "#475569", fontSize: 9 }}>{sess.metadata.duration_seconds.toFixed(1)}s</span>
+          )}
+          {sess.metadata.cameras_count != null && (
+            <span style={{ color: "#475569", fontSize: 9 }}>📷{sess.metadata.cameras_count}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryRow({ sess, index }) {
+  const { label, color } = spoolPipelineLabel(sess);
+  const shortId = sess.session_id.replace(/^session_/, "");
+  const bg = index % 2 === 0 ? "rgba(6,12,30,0.6)" : "rgba(10,16,32,0.6)";
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "5px 10px", background: bg,
+      borderBottom: "1px solid rgba(99,102,241,0.06)",
+      fontSize: 10, fontFamily: "monospace",
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+        background: sess.outcome === "ok" ? "#22c55e" : "#ef4444",
+      }} />
+      <span style={{ color: "#64748b", flexShrink: 0, fontSize: 9 }}>
+        {sess.ts ? new Date(sess.ts * 1000).toLocaleTimeString("fr-FR") : "—"}
+      </span>
+      <span style={{ color: "#94a3b8", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {shortId}
+      </span>
+      {sess.metadata?.scenario && (
+        <span style={{ color: "#6366f1", fontSize: 9, flexShrink: 0 }}>{sess.metadata.scenario}</span>
+      )}
+      <span style={{ color, fontWeight: 600, flexShrink: 0 }}>{label}</span>
+    </div>
+  );
+}
+
+function SpoolSection({ spool }) {
+  if (!spool) return null;
+  const hasActivity = spool.active.length > 0 || spool.history.length > 0 || spool.consumer_ok;
+
+  return (
+    <div style={{
+      marginTop: 20,
+      border: "2px solid rgba(99,102,241,0.3)",
+      borderRadius: 12,
+      background: "rgba(6,12,30,0.95)",
+      padding: 20,
+      position: "relative",
+      boxShadow: "0 0 20px rgba(99,102,241,0.06)",
+    }}>
+      {/* Label */}
+      <div style={{
+        position: "absolute", top: -11, left: 20,
+        background: "#020817", padding: "0 10px",
+        color: "rgba(99,102,241,0.7)", fontSize: 9, fontWeight: 700,
+        textTransform: "uppercase", letterSpacing: 2,
+      }}>
+        SPOOL · INSPECT & UPLOAD
+      </div>
+
+      {/* Header stats */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
+        {/* Consumer status */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: "50%",
+            background: spool.consumer_ok ? "#22c55e" : "#ef4444",
+            boxShadow: spool.consumer_ok ? "0 0 5px #22c55e88" : undefined,
+          }} />
+          <span style={{ color: spool.consumer_ok ? "#22c55e" : "#ef4444", fontSize: 10, fontWeight: 600 }}>
+            {spool.consumer_ok ? "CONSUMER ACTIF" : "CONSUMER INACTIF"}
+          </span>
+        </div>
+
+        <div style={{ width: 1, height: 14, background: "rgba(99,102,241,0.2)" }} />
+
+        {/* Counters */}
+        <span style={{ color: "#64748b", fontSize: 10 }}>
+          <span style={{ color: "#22c55e", fontWeight: 700 }}>{spool.processed_total}</span> traitées
+        </span>
+        <span style={{ color: "#64748b", fontSize: 10 }}>
+          <span style={{ color: spool.failed_total > 0 ? "#ef4444" : "#475569", fontWeight: 700 }}>{spool.failed_total}</span> échecs
+        </span>
+        <span style={{ color: "#64748b", fontSize: 10 }}>
+          <span style={{ color: "#f59e0b", fontWeight: 700 }}>{spool.active.length}</span> en cours
+        </span>
+      </div>
+
+      {!hasActivity && (
+        <p style={{ color: "#1e293b", fontSize: 11, textAlign: "center", padding: "20px 0" }}>
+          En attente de sessions…
+        </p>
+      )}
+
+      {/* Sessions actives */}
+      {spool.active.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <p style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>
+            EN COURS ({spool.active.length})
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {spool.active.map(sess => (
+              <ActiveSessionCard key={sess.session_id} sess={sess} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Historique */}
+      {spool.history.length > 0 && (
+        <div>
+          <p style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, marginBottom: 6 }}>
+            HISTORIQUE RÉCENT
+          </p>
+          <div style={{ border: "1px solid rgba(99,102,241,0.12)", borderRadius: 6, overflow: "hidden" }}>
+            {spool.history.slice(0, 10).map((sess, i) => (
+              <HistoryRow key={sess.session_id + i} sess={sess} index={i} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Clé visuelle (évite re-render inutile) ───────────────────────────────────
 function stationVisualKey(st) {
   return [
@@ -346,6 +573,7 @@ export default function SalleRecoltePage() {
   // Stations indexées par pc_id (int 1-30) extrait du station_id
   const [stationsMap, setStationsMap] = useState(() => new Map());
   const [meta, setMeta]               = useState({ connected: false, errors: [] });
+  const [spool, setSpool]             = useState(null);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
   const [selectedPc, setSelectedPc]   = useState(null);
@@ -368,6 +596,8 @@ export default function SalleRecoltePage() {
       prevMetaRef.current = metaKey;
       setMeta({ connected: msg.connected, errors: msg.errors ?? [] });
     }
+
+    if (msg.spool !== undefined) setSpool(msg.spool);
 
     const incoming = msg.stations ?? [];
     const changed  = [];
@@ -618,6 +848,9 @@ export default function SalleRecoltePage() {
           <PcDetailPanel pc={selectedPcData} onClose={() => setSelectedPc(null)} />
         )}
       </div>
+
+      {/* ── SPOOL ─────────────────────────────────────────────────────────── */}
+      <SpoolSection spool={spool} />
     </div>
   );
 }
