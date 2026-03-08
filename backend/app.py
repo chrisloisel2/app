@@ -166,6 +166,19 @@ logger.info("=== Blueprints registered — app ready ===")
 start_consumer()
 
 
+@app.before_request
+def log_every_request():
+    from flask import request as req
+    logger.warning("REQ %s %s content_type=%r", req.method, req.path, req.content_type)
+
+
+@app.errorhandler(Exception)
+def handle_any_exception(e):
+    logger.exception("GLOBAL UNHANDLED EXCEPTION")
+    from flask import jsonify
+    return jsonify({"ok": False, "error": "Erreur interne globale"}), 500
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return {"status": "ok"}
