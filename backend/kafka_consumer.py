@@ -498,7 +498,6 @@ def _consumer_loop():
                 enable_auto_commit=True,
                 group_id="salle-recolte-monitor",
                 value_deserializer=None,
-                consumer_timeout_ms=5000,
             )
             with _state_lock:
                 _state["connected"] = True
