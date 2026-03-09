@@ -5,7 +5,7 @@ services:
   #
   # Services externes (déjà déployés sur le réseau) :
   #   NAS      : 192.168.88.248:22   (SFTP/SSH, user: EXORIA)
-  #   Kafka    : 192.168.88.4:9092   (topic1)
+  #   Kafka    : 192.168.88.4:9092   (monitoring)
   #   MongoDB  : 192.168.88.17:27017 (admin/admin123)
   #   RabbitMQ : service externe
   #   DNS      : service externe
@@ -29,7 +29,7 @@ services:
       NAS_PASS: "${NAS_PASS}"
       KAFKA_BROKER: "192.168.88.4"
       KAFKA_BROKER_PORT: "9092"
-      KAFKA_TOPIC: "topic1"
+      KAFKA_TOPIC: "monitoring"
       MONGODB_URI: "mongodb://admin:admin123@192.168.88.17:27017/"
       CORS_ALLOWED_ORIGINS: "*"
     volumes:

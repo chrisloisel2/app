@@ -1,7 +1,7 @@
 """
 WebSocket route that streams raw Kafka messages from all topics in real time.
 Each connected client receives every message as a JSON line:
-  { "topic": "topic2", "ts": 1741437600.123, "raw": { ... } }
+  { "topic": "monitoring", "ts": 1741437600.123, "raw": { ... } }
 """
 
 import json

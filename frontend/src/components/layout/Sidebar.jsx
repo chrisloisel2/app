@@ -91,6 +91,12 @@ export default function Sidebar() {
           >
             <span>⬡</span> Kafka Logs
           </NavLink>
+          <NavLink
+            to="/ssh-parc"
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}
+          >
+            <span>⌨</span> SSH Worm
+          </NavLink>
         </div>
 
         {/* DATA EXPLORER */}

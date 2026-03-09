@@ -13,6 +13,7 @@ import OperateursPage from "./pages/OperateursPage";
 import AnnotateursPage from "./pages/AnnotateursPage";
 import ScenariosPage from "./pages/ScenariosPage";
 import KafkaLogsPage from "./pages/KafkaLogsPage";
+import SshParcPage from "./pages/SshParcPage";
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="/annotateurs"         element={<AnnotateursPage />} />
               <Route path="/scenarios"           element={<ScenariosPage />} />
               <Route path="/kafka-logs"          element={<KafkaLogsPage />} />
+              <Route path="/ssh-parc"            element={<SshParcPage />} />
             </Routes>
           </main>
         </div>

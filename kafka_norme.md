@@ -1,6 +1,6 @@
-# Kafka Events — Topic `topic2`
+# Kafka Events — Topic `monitoring`
 
-Tous les messages sont publiés sur `KAFKA_SALLE_TOPIC` (`topic2`) via `KafkaEventPublisher`.
+Tous les messages sont publiés sur `KAFKA_SALLE_TOPIC` (`monitoring`) via `KafkaEventPublisher`.
 
 ## Format commun
 

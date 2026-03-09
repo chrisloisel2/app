@@ -257,7 +257,7 @@ export default function OrchestrateurPage() {
   const stations = data?.stations ?? [];
 
   const statusLabel = {
-    connected:    `✓  192.168.88.4:9092  [topic2]`,
+    connected:    `✓  192.168.88.4:9092  [monitoring]`,
     disconnected: `—  192.168.88.4:9092  Déconnecté`,
     error:        `⚠  192.168.88.4:9092  Erreur`,
     connecting:   `… Connexion…`,
@@ -357,7 +357,7 @@ export default function OrchestrateurPage() {
                     }}>
                       {kafkaStatus === "connecting"
                         ? "Connexion au broker Kafka…"
-                        : "En attente d'événements KafkaEventPublisher (topic2)…"}
+                        : "En attente d'événements KafkaEventPublisher (monitoring)…"}
                     </td>
                   </tr>
                 ) : (

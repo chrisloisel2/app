@@ -118,6 +118,13 @@ except Exception:
     sys.exit(1)
 
 try:
+    from routes.ssh_parc import ssh_parc_bp
+    logger.info("routes.ssh_parc imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.ssh_parc:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
     from kafka_consumer import start_consumer
     logger.info("kafka_consumer imported OK")
 except Exception:
@@ -164,6 +171,7 @@ app.register_blueprint(operateurs_bp)
 app.register_blueprint(annotateurs_bp)
 app.register_blueprint(scenarios_bp)
 app.register_blueprint(kafka_logs_bp)
+app.register_blueprint(ssh_parc_bp)
 
 from routes.salle import register_ws_route
 register_ws_route(sock)
@@ -171,7 +179,7 @@ register_kafka_logs_ws(sock)
 
 logger.info("=== Blueprints registered — app ready ===")
 
-# Start Kafka consumer background thread (topic2 — SalleReporter + KafkaEventPublisher)
+# Start Kafka consumer background thread (monitoring — SalleReporter + KafkaEventPublisher)
 start_consumer()
 
 

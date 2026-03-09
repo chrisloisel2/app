@@ -36,6 +36,11 @@ export const createScenario  = (body)     => api.post("/api/scenarios", body);
 export const updateScenario  = (id, body) => api.put(`/api/scenarios/${id}`, body);
 export const deleteScenario  = (id)       => api.delete(`/api/scenarios/${id}`);
 
+// ── SSH Parc ──────────────────────────────────────────────────────────────────
+export const fetchSshParc   = ()    => api.get("/api/ssh-parc");
+export const deleteSshEntry = (id)  => api.delete(`/api/ssh-parc/${id}`);
+export const clearSshParc   = ()    => api.delete("/api/ssh-parc");
+
 // ── KPIs ──────────────────────────────────────────────────────────────────────
 export const fetchKpiOverview      = ()            => api.get("/api/kpis/overview");
 export const fetchKpiDaily         = (days = 30)   => api.get("/api/kpis/daily", { params: { days } });

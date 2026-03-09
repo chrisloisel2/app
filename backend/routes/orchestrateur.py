@@ -6,5 +6,5 @@ orchestrateur_bp = Blueprint("orchestrateur", __name__)
 
 @orchestrateur_bp.get("/api/orchestrateur")
 def orchestrateur():
-    """Snapshot temps-réel des stations (KafkaEventPublisher, topic2)."""
+    """Snapshot temps-réel des stations (KafkaEventPublisher, monitoring)."""
     return jsonify(get_stations_snapshot())

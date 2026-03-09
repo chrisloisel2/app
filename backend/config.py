@@ -11,7 +11,7 @@ NAS_PASS         = os.environ.get("NAS_PASS", "")
 # Kafka (external broker)
 KAFKA_BROKER      = os.environ.get("KAFKA_BROKER", "192.168.88.4")
 KAFKA_BROKER_PORT = int(os.environ.get("KAFKA_BROKER_PORT", "9092"))
-KAFKA_TOPIC       = os.environ.get("KAFKA_TOPIC", "topic1")
+KAFKA_TOPIC       = os.environ.get("KAFKA_TOPIC", "monitoring")
 
 # MongoDB (external instance)
 MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://admin:admin123@192.168.88.17:27017/")

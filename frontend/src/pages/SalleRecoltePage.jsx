@@ -688,7 +688,7 @@ export default function SalleRecoltePage() {
             SALLE DE RÉCOLTE
           </h1>
           <p style={{ color: "#4b5563", fontSize: 11, margin: "3px 0 0" }}>
-            Surveillance temps-réel · Kafka topic2 · WebSocket
+            Surveillance temps-réel · Kafka monitoring · WebSocket
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

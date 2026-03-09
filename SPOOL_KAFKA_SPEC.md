@@ -1,4 +1,4 @@
-# Spool — Data attendue via Kafka (topic2)
+# Spool — Data attendue via Kafka (monitoring)
 
 ## Structure exacte du message
 
@@ -52,7 +52,7 @@
 
 ## Comportement du consumer
 
-- Le message est reçu en **raw bytes** sur `topic2`, désérialisé manuellement en JSON
+- Le message est reçu en **raw bytes** sur `monitoring`, désérialisé manuellement en JSON
 - Le routing se fait via `source == "spool"`
 - Le message entier est stocké tel quel dans `_state["spool"]` — aucune transformation n'est appliquée
 - A chaque message reçu, tous les clients WebSocket connectés sur `/api/salle/ws` reçoivent un snapshot complet mis à jour

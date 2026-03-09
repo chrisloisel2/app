@@ -1,5 +1,5 @@
 """
-Kafka consumer for topic2 (KAFKA_SALLE_TOPIC).
+Kafka consumer for monitoring (KAFKA_SALLE_TOPIC).
 
 KafkaEventPublisher — messages plats (tous les champs au niveau racine) :
   {
@@ -450,13 +450,13 @@ def _process_message(raw_value: bytes):
     try:
         msg = json.loads(raw_value.decode("utf-8"))
     except Exception as e:
-        logger.warning("Kafka topic2: invalid JSON — %s", e)
+        logger.warning("Kafka monitoring: invalid JSON — %s", e)
         return
 
     # Broadcast raw message to log viewers
     try:
         from routes.kafka_logs import broadcast
-        broadcast("topic2", msg)
+        broadcast("monitoring", msg)
     except Exception:
         pass
 
@@ -476,7 +476,7 @@ def _process_message(raw_value: bytes):
             # KafkaEventPublisher — événement cycle de vie
             should_notify = _handle_event(msg)
         else:
-            logger.debug("Kafka topic2: message sans discriminant reconnu")
+            logger.debug("Kafka monitoring: message sans discriminant reconnu")
 
     if should_notify:
         _notify_ws()
@@ -486,13 +486,13 @@ def _process_message(raw_value: bytes):
 
 def _consumer_loop():
     bootstrap = _get_bootstrap_server()
-    logger.info("Kafka consumer topic2: connecting to %s", bootstrap)
+    logger.info("Kafka consumer monitoring: connecting to %s", bootstrap)
 
     while True:
         try:
             from kafka import KafkaConsumer
             consumer = KafkaConsumer(
-                "topic2",
+                "monitoring",
                 bootstrap_servers=[bootstrap],
                 auto_offset_reset="latest",
                 enable_auto_commit=True,
@@ -503,7 +503,7 @@ def _consumer_loop():
             with _state_lock:
                 _state["connected"] = True
                 _state["errors"] = []
-            logger.info("Kafka consumer topic2: connected")
+            logger.info("Kafka consumer monitoring: connected")
             try:
                 from routes.kafka_logs import broadcast_status
                 broadcast_status(True)
@@ -515,7 +515,7 @@ def _consumer_loop():
 
         except Exception as e:
             err_msg = str(e)
-            logger.error("Kafka consumer topic2 error: %s", err_msg)
+            logger.error("Kafka consumer monitoring error: %s", err_msg)
             with _state_lock:
                 _state["connected"] = False
                 _state["errors"].append({
@@ -539,7 +539,7 @@ def start_consumer():
         return
     _consumer_thread = threading.Thread(
         target=_consumer_loop,
-        name="kafka-topic2-consumer",
+        name="kafka-monitoring-consumer",
         daemon=True,
     )
     _consumer_thread.start()

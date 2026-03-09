@@ -1,12 +1,12 @@
 # Spécification des données — Salle de récolte
-**Topic Kafka :** `topic2`
+**Topic Kafka :** `monitoring`
 **Producteurs attendus :** 30 PCs d'enregistrement · 1 Spool · 1 NAS
 
 ---
 
 ## 1. Messages depuis les PCs (30 postes)
 
-Chaque poste publie périodiquement un message JSON sur `topic2`.
+Chaque poste publie périodiquement un message JSON sur `monitoring`.
 
 **Champ discriminant :** `"source": "pc"`
 
@@ -207,7 +207,7 @@ Le NAS est le stockage final des sessions de récolte.
 │  PC-30 ─┘         │                  │              │
 │                   └──────────────────┘              │
 └─────────────────────────────────────────────────────┘
-          ↓ Kafka topic2 (JSON)
+          ↓ Kafka monitoring (JSON)
     [ Backend Flask consumer ]
           ↓ GET /api/salle (polling 3s)
     [ Frontend React SalleRecoltePage ]

@@ -4,8 +4,7 @@ const MAX_LINES = 500;
 
 // ── Couleur par topic ─────────────────────────────────────────────────────────
 const TOPIC_COLOR = {
-  topic1: "#22d3ee",
-  topic2: "#a855f7",
+  monitoring: "#a855f7",
 };
 
 // ── Couleur par type d'événement ──────────────────────────────────────────────
