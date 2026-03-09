@@ -123,10 +123,11 @@ function LogLine({ entry }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function KafkaLogsPage() {
-  const [lines, setLines]       = useState([]);
-  const [paused, setPaused]     = useState(false);
-  const [filter, setFilter]     = useState("");
-  const [wsStatus, setWsStatus] = useState("connecting");
+  const [lines, setLines]           = useState([]);
+  const [paused, setPaused]         = useState(false);
+  const [filter, setFilter]         = useState("");
+  const [wsStatus, setWsStatus]     = useState("connecting");
+  const [kafkaStatus, setKafkaStatus] = useState({ connected: null, error: null });
   const bottomRef  = useRef(null);
   const pausedRef  = useRef(false);
   const pendingRef = useRef([]);
@@ -168,6 +169,10 @@ export default function KafkaLogsPage() {
       ws.onmessage = (e) => {
         try {
           const entry = JSON.parse(e.data);
+          if (entry.topic === "__status__") {
+            setKafkaStatus({ connected: entry.raw.kafka_connected, error: entry.raw.error ?? null });
+            return;
+          }
           if (!pausedRef.current) {
             pendingRef.current.push(entry);
           }
@@ -223,7 +228,7 @@ export default function KafkaLogsPage() {
           }}>{t}</span>
         ))}
 
-        {/* Status */}
+        {/* WS Status */}
         <span style={{
           display: "flex", alignItems: "center", gap: 5,
           marginLeft: 4,
@@ -233,7 +238,21 @@ export default function KafkaLogsPage() {
             background: wsStatus === "connected" ? "#22c55e" : wsStatus === "connecting" ? "#f59e0b" : "#ef4444",
             boxShadow: wsStatus === "connected" ? "0 0 5px #22c55e88" : undefined,
           }} />
-          <span style={{ color: "#475569", fontSize: 10 }}>{wsStatus}</span>
+          <span style={{ color: "#475569", fontSize: 10 }}>ws:{wsStatus}</span>
+        </span>
+
+        {/* Kafka Status */}
+        <span style={{
+          display: "flex", alignItems: "center", gap: 5,
+        }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: "50%",
+            background: kafkaStatus.connected === null ? "#64748b" : kafkaStatus.connected ? "#22c55e" : "#ef4444",
+            boxShadow: kafkaStatus.connected ? "0 0 5px #22c55e88" : undefined,
+          }} />
+          <span style={{ color: "#475569", fontSize: 10 }}>
+            kafka:{kafkaStatus.connected === null ? "…" : kafkaStatus.connected ? "ok" : "erreur"}
+          </span>
         </span>
 
         {/* Filter */}
@@ -302,10 +321,25 @@ export default function KafkaLogsPage() {
       }}>
         {filtered.length === 0 ? (
           <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            height: "100%", color: "#1e293b", fontSize: 13, letterSpacing: 1,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            height: "100%", gap: 8,
           }}>
-            {wsStatus === "connected" ? "En attente de messages Kafka…" : "Connexion…"}
+            {kafkaStatus.connected === false ? (
+              <>
+                <span style={{ color: "#ef4444", fontSize: 13, letterSpacing: 1 }}>
+                  Kafka déconnecté
+                </span>
+                {kafkaStatus.error && (
+                  <span style={{ color: "#64748b", fontSize: 11, maxWidth: 500, textAlign: "center", wordBreak: "break-all" }}>
+                    {kafkaStatus.error}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span style={{ color: "#1e293b", fontSize: 13, letterSpacing: 1 }}>
+                {wsStatus === "connected" ? "En attente de messages Kafka…" : "Connexion…"}
+              </span>
+            )}
           </div>
         ) : (
           filtered.map((entry, i) => <LogLine key={i} entry={entry} />)

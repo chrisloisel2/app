@@ -504,6 +504,11 @@ def _consumer_loop():
                 _state["connected"] = True
                 _state["errors"] = []
             logger.info("Kafka consumer topic2: connected")
+            try:
+                from routes.kafka_logs import broadcast_status
+                broadcast_status(True)
+            except Exception:
+                pass
 
             for message in consumer:
                 _process_message(message.value)
@@ -518,6 +523,11 @@ def _consumer_loop():
                     "msg": err_msg,
                 })
                 _state["errors"] = _state["errors"][-10:]
+            try:
+                from routes.kafka_logs import broadcast_status
+                broadcast_status(False, err_msg)
+            except Exception:
+                pass
 
             time.sleep(10)
 

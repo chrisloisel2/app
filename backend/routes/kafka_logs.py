@@ -18,6 +18,7 @@ kafka_logs_bp = Blueprint("kafka_logs", __name__)
 # ── Client registry ───────────────────────────────────────────────────────────
 _clients: set = set()
 _clients_lock = threading.Lock()
+_last_kafka_status: dict = {"kafka_connected": False, "error": None}
 
 
 def broadcast(topic: str, raw: dict):
@@ -33,11 +34,40 @@ def broadcast(topic: str, raw: dict):
         _clients.difference_update(dead)
 
 
+def broadcast_status(connected: bool, error: str = None):
+    """Called by Kafka consumer to report its connection status."""
+    global _last_kafka_status
+    _last_kafka_status = {"kafka_connected": connected, "error": error}
+    line = json.dumps({
+        "topic": "__status__",
+        "ts": time.time(),
+        "raw": _last_kafka_status,
+    })
+    with _clients_lock:
+        dead = set()
+        for ws in _clients:
+            try:
+                ws.send(line)
+            except Exception:
+                dead.add(ws)
+        _clients.difference_update(dead)
+
+
 def register_ws_route(sock):
     @sock.route("/api/kafka-logs/ws")
     def kafka_logs_ws(ws):
         with _clients_lock:
             _clients.add(ws)
+            current_status = _last_kafka_status.copy()
+        # Send current Kafka status immediately to the new client
+        try:
+            ws.send(json.dumps({
+                "topic": "__status__",
+                "ts": time.time(),
+                "raw": current_status,
+            }))
+        except Exception:
+            pass
         try:
             while True:
                 msg = ws.receive(timeout=30)
