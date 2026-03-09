@@ -6,7 +6,7 @@ const STATUS_COLOR = {
   recording:    { ring: "#a855f7", glow: "rgba(168,85,247,0.35)", label: "#a855f7" },
   uploading:    { ring: "#f59e0b", glow: "rgba(245,158,11,0.35)", label: "#f59e0b" },
   queued:       { ring: "#6366f1", glow: "rgba(99,102,241,0.35)", label: "#6366f1" },
-  disconnected: { ring: "#dc2626", glow: "rgba(220,38,38,0.25)",  label: "#f87171" },
+  disconnected: { ring: "#6b7280", glow: "rgba(107,114,128,0.15)", label: "#9ca3af" },
   never_seen:   { ring: "#1f2937", glow: "rgba(31,41,55,0.10)",   label: "#374151" },
 };
 
@@ -35,9 +35,16 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
   const hasAlert    = pc.alert;
   const operator    = pc.operator;
 
-  const borderColor = hasAlert ? "#ef4444" : isRecording ? "#a855f7" : c.ring;
+  const [alertBlink, setAlertBlink] = useState(true);
+  useEffect(() => {
+    if (!hasAlert) return;
+    const id = setInterval(() => setAlertBlink(b => !b), 500);
+    return () => clearInterval(id);
+  }, [hasAlert]);
+
+  const borderColor = hasAlert ? (alertBlink ? "#ef4444" : "#7f1d1d") : isRecording ? "#a855f7" : c.ring;
   const glowColor   = hasAlert
-    ? "rgba(239,68,68,0.4)"
+    ? (alertBlink ? "rgba(239,68,68,0.6)" : "rgba(239,68,68,0.05)")
     : isRecording
     ? "rgba(168,85,247,0.4)"
     : c.glow;
@@ -60,7 +67,7 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
           ? `0 0 0 2px #3b82f6, 0 0 10px ${glowColor}`
           : `0 0 6px ${glowColor}`,
         background: hasAlert
-          ? "rgba(40,10,10,0.95)"
+          ? (alertBlink ? "rgba(60,10,10,0.97)" : "rgba(15,23,42,0.9)")
           : isRecording
           ? "rgba(30,10,45,0.95)"
           : "rgba(15,23,42,0.9)",
@@ -287,7 +294,7 @@ function Legend() {
     { color: "#ef4444", label: "Alerte"         },
     { color: "#f59e0b", label: "Upload"         },
     { color: "#6366f1", label: "File"           },
-    { color: "#dc2626", label: "Déconnecté"     },
+    { color: "#6b7280", label: "Déconnecté"     },
     { color: "#1f2937", label: "Inconnu"        },
   ];
   return (
@@ -715,7 +722,7 @@ export default function SalleRecoltePage() {
           { label: "Actifs",          value: stats.active       ?? 0, color: "#22c55e" },
           { label: "Enregistrement",  value: stats.recording    ?? 0, color: "#a855f7" },
           { label: "Upload",          value: stats.uploading    ?? 0, color: "#f59e0b" },
-          { label: "Déconnectés",     value: stats.disconnected ?? 0, color: "#f87171" },
+          { label: "Déconnectés",     value: stats.disconnected ?? 0, color: "#9ca3af" },
           { label: "Inconnus",        value: stats.never_seen   ?? 0, color: "#374151" },
           { label: "Total postes",    value: 30,                      color: "#e2e8f0" },
         ].map(({ label, value, color }) => (
