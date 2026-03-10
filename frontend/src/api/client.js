@@ -40,6 +40,7 @@ export const deleteScenario  = (id)       => api.delete(`/api/scenarios/${id}`);
 export const fetchSshParc   = ()    => api.get("/api/ssh-parc");
 export const deleteSshEntry = (id)  => api.delete(`/api/ssh-parc/${id}`);
 export const clearSshParc   = ()    => api.delete("/api/ssh-parc");
+// exec utilise fetch natif (SSE streaming) — pas axios
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
 export const fetchKpiOverview      = ()            => api.get("/api/kpis/overview");

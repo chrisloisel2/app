@@ -205,6 +205,243 @@ const ASCII = `
  ███████║███████║██║  ██║    ╚███╔███╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
  ╚══════╝╚══════╝╚═╝  ╚═╝     ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝`.trim();
 
+// ── Terminal broadcast ────────────────────────────────────────────────────────
+function BroadcastTerminal({ docs }) {
+  const [input, setInput]       = useState("");
+  const [history, setHistory]   = useState([]); // { cmd, results: [{hostname,ip,stdout,stderr,exit_code}], running, total }
+  const [histIdx, setHistIdx]   = useState(-1);
+  const [cmdHistory, setCmdHistory] = useState([]);
+  const outputRef = useRef(null);
+  const inputRef  = useRef(null);
+
+  // Scroll en bas à chaque update
+  useEffect(() => {
+    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
+  }, [history]);
+
+  const idxRef = useRef(0);
+
+  const runCommand = () => {
+    const cmd = input.trim();
+    if (!cmd) return;
+
+    setCmdHistory(h => [cmd, ...h.filter(c => c !== cmd)]);
+    setHistIdx(-1);
+    setInput("");
+
+    const entry = { cmd, results: [], running: true, total: 0, ts: Date.now() };
+    // Capture l'index de manière stable via ref
+    setHistory(h => {
+      idxRef.current = h.length;
+      return [...h, entry];
+    });
+
+    fetch("/api/ssh-parc/exec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: cmd }),
+    }).then(res => {
+      const idx = idxRef.current;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      const read = () => reader.read().then(({ done, value }) => {
+        if (done) {
+          setHistory(h => h.map((e, i) => i === idx ? { ...e, running: false } : e));
+          return;
+        }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const msg = JSON.parse(line.slice(6));
+            if (msg.type === "start") {
+              setHistory(h => h.map((e, i) => i === idx ? { ...e, total: msg.total } : e));
+            } else if (msg.type === "result") {
+              setHistory(h => h.map((e, i) => i === idx ? { ...e, results: [...e.results, msg] } : e));
+            } else if (msg.type === "done") {
+              setHistory(h => h.map((e, i) => i === idx ? { ...e, running: false } : e));
+            }
+          } catch {}
+        }
+        read();
+      });
+      read();
+    }).catch(err => {
+      const idx = idxRef.current;
+      setHistory(h => h.map((e, i) => i === idx ? { ...e, running: false, error: String(err) } : e));
+    });
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") { runCommand(); return; }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.min(histIdx + 1, cmdHistory.length - 1);
+      setHistIdx(next);
+      setInput(cmdHistory[next] ?? "");
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.max(histIdx - 1, -1);
+      setHistIdx(next);
+      setInput(next === -1 ? "" : cmdHistory[next] ?? "");
+    }
+  };
+
+  return (
+    <div style={{
+      background: C.bgCard,
+      border: `1px solid ${C.border}`,
+      borderRadius: 8,
+      marginTop: 24,
+      overflow: "hidden",
+    }}>
+      {/* Header terminal */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "8px 14px",
+        background: "#050e05",
+        borderBottom: `1px solid ${C.border}`,
+      }}>
+        <span style={{ color: C.green, fontFamily: mono, fontSize: 11, fontWeight: 700 }}>
+          BROADCAST TERMINAL
+        </span>
+        <span style={{ color: C.gray, fontFamily: mono, fontSize: 10 }}>
+          — {docs.length} machine{docs.length !== 1 ? "s" : ""}
+        </span>
+        <span style={{
+          marginLeft: "auto", color: C.greenFaint, fontFamily: mono, fontSize: 9,
+        }}>
+          ↑↓ historique · Entrée pour exécuter
+        </span>
+      </div>
+
+      {/* Sortie */}
+      <div
+        ref={outputRef}
+        style={{
+          height: 380, overflowY: "auto",
+          padding: "12px 16px",
+          fontFamily: mono, fontSize: 11,
+        }}
+      >
+        {history.length === 0 && (
+          <span style={{ color: C.greenFaint }}>
+            {">"} Tape une commande pour l'exécuter sur tous les PCs...
+          </span>
+        )}
+        {history.map((entry, ei) => (
+          <div key={ei} style={{ marginBottom: 16 }}>
+            {/* Commande lancée */}
+            <div style={{ color: C.green, marginBottom: 4 }}>
+              <span style={{ color: C.gray }}>$</span>{" "}
+              <span style={{ color: C.green }}>{entry.cmd}</span>
+              <span style={{ color: C.gray, fontSize: 9, marginLeft: 12 }}>
+                {new Date(entry.ts).toLocaleTimeString("fr-FR")}
+                {entry.total > 0 && ` · ${entry.results.length}/${entry.total}`}
+                {entry.running && <span style={{ color: C.yellow }}> ↻ en cours…</span>}
+              </span>
+            </div>
+            {entry.error && (
+              <div style={{ color: C.red, paddingLeft: 12 }}>✗ {entry.error}</div>
+            )}
+            {/* Résultats par PC */}
+            {entry.results.map((r, ri) => (
+              <div key={ri} style={{
+                marginBottom: 6,
+                paddingLeft: 12,
+                borderLeft: `2px solid ${r.exit_code === 0 ? C.greenFaint : "rgba(255,51,51,0.3)"}`,
+              }}>
+                {/* Host header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                  <span style={{ color: C.cyan, fontWeight: 700 }}>{r.hostname}</span>
+                  <span style={{ color: C.gray, fontSize: 9 }}>{r.ip}</span>
+                  <span style={{
+                    fontSize: 9,
+                    color: r.exit_code === 0 ? C.green : C.red,
+                    border: `1px solid ${r.exit_code === 0 ? C.greenFaint : "rgba(255,51,51,0.3)"}`,
+                    borderRadius: 2, padding: "0 4px",
+                  }}>
+                    exit {r.exit_code}
+                  </span>
+                </div>
+                {/* stdout */}
+                {r.stdout && (
+                  <pre style={{
+                    margin: 0, color: C.white, fontSize: 11,
+                    whiteSpace: "pre-wrap", wordBreak: "break-all",
+                    background: "rgba(0,255,65,0.03)",
+                    padding: "3px 6px", borderRadius: 3,
+                  }}>{r.stdout}</pre>
+                )}
+                {/* stderr */}
+                {r.stderr && (
+                  <pre style={{
+                    margin: 0, color: C.red, fontSize: 11,
+                    whiteSpace: "pre-wrap", wordBreak: "break-all",
+                    padding: "3px 6px",
+                  }}>{r.stderr}</pre>
+                )}
+                {!r.stdout && !r.stderr && (
+                  <span style={{ color: C.gray, fontSize: 10 }}>(aucune sortie)</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Input */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "8px 14px",
+        borderTop: `1px solid ${C.border}`,
+        background: "#050e05",
+      }}>
+        <span style={{ color: C.green, fontFamily: mono, fontSize: 13 }}>$</span>
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="commande à exécuter sur tous les PCs…"
+          autoFocus
+          style={{
+            flex: 1,
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            color: C.green,
+            fontFamily: mono,
+            fontSize: 13,
+            caretColor: C.green,
+          }}
+        />
+        <button
+          onClick={runCommand}
+          disabled={!input.trim()}
+          style={{
+            background: input.trim() ? C.greenFaint : "none",
+            border: `1px solid ${C.border}`,
+            borderRadius: 4,
+            color: input.trim() ? C.green : C.gray,
+            fontFamily: mono,
+            fontSize: 10,
+            padding: "4px 12px",
+            cursor: input.trim() ? "pointer" : "default",
+          }}
+        >
+          ▶ exec
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function SshParcPage() {
   const [docs, setDocs]       = useState([]);
@@ -432,6 +669,9 @@ export default function SshParcPage() {
             </table>
           )}
         </div>
+
+        {/* Terminal broadcast */}
+        <BroadcastTerminal docs={docs} />
 
         {/* Footer */}
         <div style={{
