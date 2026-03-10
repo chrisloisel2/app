@@ -439,10 +439,12 @@ function GlobalIntegrityBanner({ stations, onSelect }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function OrchestrateurPage() {
-  const [data, setData]                 = useState(null);
-  const [clock, setClock]               = useState("");
-  const [blink, setBlink]               = useState(true);
-  const [kafkaStatus, setKafkaStatus]   = useState("connecting");
+  // Stations conservées entre les messages (Map station_id → station)
+  const [stationsMap, setStationsMap] = useState(() => new Map());
+  const [stats, setStats]             = useState({ total: 0, connected: 0, recording: 0, disconnected: 0 });
+  const [clock, setClock]             = useState("");
+  const [blink, setBlink]             = useState(true);
+  const [kafkaStatus, setKafkaStatus] = useState("connecting");
   const [selectedInteg, setSelectedInteg] = useState(null); // station_id
 
   // Clock
@@ -459,10 +461,22 @@ export default function OrchestrateurPage() {
     return () => clearInterval(id);
   }, []);
 
-  // WebSocket
+  // WebSocket — merge incoming stations, never erase existing ones
   const handleMessage = useCallback((msg) => {
-    setData(msg);
     setKafkaStatus(msg.connected ? "connected" : "disconnected");
+
+    if (msg.stats) setStats(msg.stats);
+
+    const incoming = msg.stations ?? [];
+    if (incoming.length > 0) {
+      setStationsMap(prev => {
+        const next = new Map(prev);
+        for (const st of incoming) {
+          next.set(st.station_id, st);
+        }
+        return next;
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -487,8 +501,7 @@ export default function OrchestrateurPage() {
     return () => { clearTimeout(reconnectTimer); ws?.close(); };
   }, [handleMessage]);
 
-  const stats    = data?.stats    ?? { total: 0, connected: 0, recording: 0, disconnected: 0 };
-  const stations = data?.stations ?? [];
+  const stations = useMemo(() => Array.from(stationsMap.values()), [stationsMap]);
 
   const handleSelectInteg = useCallback((stationId) => {
     setSelectedInteg(prev => prev === stationId ? null : stationId);
@@ -588,12 +601,18 @@ export default function OrchestrateurPage() {
                 {stations.length === 0 ? (
                   <tr>
                     <td colSpan={COLUMNS.length} style={{
-                      textAlign: "center", color: C.textMuted,
-                      padding: "60px 0", fontSize: 13,
+                      textAlign: "center", padding: "60px 0",
                     }}>
-                      {kafkaStatus === "connecting"
-                        ? "Connexion au broker Kafka…"
-                        : "En attente d'événements KafkaEventPublisher (monitoring)…"}
+                      <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                        <span style={{ color: C.textMuted, fontSize: 13 }}>
+                          {kafkaStatus === "connecting"
+                            ? "Connexion au broker Kafka…"
+                            : "En attente des premières stations…"}
+                        </span>
+                        <span style={{ color: C.textMuted, fontSize: 10 }}>
+                          Les données s'afficheront dès réception du premier événement
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ) : (
