@@ -315,223 +315,256 @@ function Legend() {
 
 // ── Spool components ─────────────────────────────────────────────────────────
 
-function spoolPipelineLabel(sess) {
-  const ps = sess.pipeline_status;
-  if (ps === "completed")               return { label: "✓ Complété",          color: "#22c55e" };
-  if (ps === "inspection_failed")       return { label: "✗ Inspection KO",     color: "#ef4444" };
-  if (ps === "upload_failed")           return { label: "✗ Upload KO",         color: "#ef4444" };
-  if (ps === "quarantine_upload_failed")return { label: "✗ Quarantaine KO",    color: "#ef4444" };
-  if (ps === "inspection_passed")       return { label: "✓ Insp. OK → Upload", color: "#f59e0b" };
-  if (sess.step === "upload")           return { label: "⬆ Upload…",           color: "#f59e0b" };
-  if (sess.step === "inspection")       return { label: "🔍 Inspection…",       color: "#6366f1" };
-  if (sess.step === "pipeline")         return { label: "⚙ Pipeline…",         color: "#6366f1" };
-  return                                       { label: sess.step + "/" + sess.status, color: "#64748b" };
-}
-
-function ProgressBar({ pct, color }) {
+function SpoolProgressBar({ pct, color = "#22d3ee" }) {
   return (
-    <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 3, height: 4, marginTop: 4 }}>
+    <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 3, height: 3, flex: 1 }}>
       <div style={{
         width: `${Math.min(100, Math.max(0, pct))}%`,
-        height: "100%",
-        background: color ?? "#22d3ee",
-        borderRadius: 3,
-        transition: "width 0.4s",
-        boxShadow: `0 0 6px ${color}66`,
+        height: "100%", background: color, borderRadius: 3,
+        transition: "width 0.4s", boxShadow: `0 0 4px ${color}66`,
       }} />
     </div>
   );
 }
 
-function ActiveSessionCard({ sess }) {
-  const { label, color } = spoolPipelineLabel(sess);
-  const up = sess.upload;
-  const insp = sess.inspection;
-  const uploadPct = up.file_total > 0
-    ? Math.round((up.files_uploaded / up.file_total) * 100)
-    : 0;
-  const shortId = sess.session_id.replace(/^session_/, "");
-
+function SpoolDiskBar({ label, d }) {
+  if (!d) return null;
+  const pct = d.used_pct ?? 0;
+  const color = pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "#22d3ee";
   return (
-    <div style={{
-      background: "rgba(6,12,30,0.9)",
-      border: "1px solid rgba(99,102,241,0.25)",
-      borderRadius: 6,
-      padding: "10px 12px",
-      minWidth: 220,
-      flex: "1 1 220px",
-    }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <span style={{ color: "#94a3b8", fontSize: 10, fontFamily: "monospace" }}>{shortId}</span>
-        <span style={{ color, fontSize: 10, fontWeight: 700 }}>{label}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 100 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9 }}>
+        <span style={{ color: "#475569", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</span>
+        <span style={{ color, fontWeight: 700 }}>{pct.toFixed(1)}%</span>
       </div>
-
-      {/* Inspection */}
-      {insp.total_checks > 0 && (
-        <div style={{ marginBottom: 5 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-            <span style={{ color: "#475569" }}>Inspection</span>
-            <span style={{ color: insp.ok === false ? "#ef4444" : insp.ok === true ? "#22c55e" : "#f59e0b" }}>
-              {insp.ok === null ? `${insp.total_checks} checks…` : insp.ok ? `${insp.total_checks} checks ✓` : `${insp.failed_checks.length} erreurs`}
-            </span>
-          </div>
-          {insp.ok === false && insp.errors.slice(0, 2).map((e, i) => (
-            <div key={i} style={{ color: "#f87171", fontSize: 9, fontFamily: "monospace", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {e}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Upload progress */}
-      {up.file_total > 0 && (
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-            <span style={{ color: "#475569" }}>
-              {up.rel ? (
-                <span style={{ fontFamily: "monospace", color: "#64748b", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom" }}>
-                  {up.rel.split("/").pop()}
-                </span>
-              ) : "Upload"}
-            </span>
-            <span style={{ color: "#f59e0b" }}>
-              {up.files_uploaded}/{up.file_total}
-              {up.speed_mbps > 0 && <span style={{ color: "#64748b" }}> · {up.speed_mbps.toFixed(1)} Mb/s</span>}
-            </span>
-          </div>
-          <ProgressBar pct={uploadPct} color="#f59e0b" />
-        </div>
-      )}
-
-      {/* Metadata */}
-      {sess.metadata && (
-        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {sess.metadata.scenario && (
-            <span style={{ color: "#6366f1", fontSize: 9 }}>{sess.metadata.scenario}</span>
-          )}
-          {sess.metadata.duration_seconds != null && (
-            <span style={{ color: "#475569", fontSize: 9 }}>{sess.metadata.duration_seconds.toFixed(1)}s</span>
-          )}
-          {sess.metadata.cameras_count != null && (
-            <span style={{ color: "#475569", fontSize: 9 }}>📷{sess.metadata.cameras_count}</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HistoryRow({ sess, index }) {
-  const { label, color } = spoolPipelineLabel(sess);
-  const shortId = sess.session_id.replace(/^session_/, "");
-  const bg = index % 2 === 0 ? "rgba(6,12,30,0.6)" : "rgba(10,16,32,0.6)";
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10,
-      padding: "5px 10px", background: bg,
-      borderBottom: "1px solid rgba(99,102,241,0.06)",
-      fontSize: 10, fontFamily: "monospace",
-    }}>
-      <span style={{
-        width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-        background: sess.outcome === "ok" ? "#22c55e" : "#ef4444",
-      }} />
-      <span style={{ color: "#64748b", flexShrink: 0, fontSize: 9 }}>
-        {sess.ts ? new Date(sess.ts * 1000).toLocaleTimeString("fr-FR") : "—"}
-      </span>
-      <span style={{ color: "#94a3b8", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {shortId}
-      </span>
-      {sess.metadata?.scenario && (
-        <span style={{ color: "#6366f1", fontSize: 9, flexShrink: 0 }}>{sess.metadata.scenario}</span>
-      )}
-      <span style={{ color, fontWeight: 600, flexShrink: 0 }}>{label}</span>
+      <SpoolProgressBar pct={pct} color={color} />
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#334155" }}>
+        <span>{d.used_mb >= 1000 ? (d.used_mb / 1024).toFixed(1) + " GB" : d.used_mb + " MB"} utilisés</span>
+        <span>{d.free_mb >= 1000 ? (d.free_mb / 1024).toFixed(1) + " GB" : d.free_mb + " MB"} libres</span>
+      </div>
     </div>
   );
 }
 
 function SpoolSection({ spool }) {
   if (!spool) return null;
-  const hasActivity = spool.active.length > 0 || spool.history.length > 0 || spool.consumer_ok;
+
+  // Détecte le format — nouveau (spool_status) ou ancien
+  const isNew = spool.source === "spool_status";
+
+  if (!isNew) {
+    // Ancien format minimaliste
+    return (
+      <div style={{
+        marginTop: 20, border: "1px solid rgba(99,102,241,0.2)", borderRadius: 8,
+        background: "rgba(6,12,30,0.95)", padding: "12px 16px",
+        display: "flex", alignItems: "center", gap: 16,
+      }}>
+        <span style={{ color: spool.consumer_ok ? "#22c55e" : "#ef4444", fontSize: 10, fontWeight: 700 }}>
+          {spool.consumer_ok ? "● SPOOL ACTIF" : "○ SPOOL INACTIF"}
+        </span>
+        <span style={{ color: "#64748b", fontSize: 10 }}>
+          <span style={{ color: "#22c55e", fontWeight: 700 }}>{spool.processed_total}</span> traitées ·{" "}
+          <span style={{ color: spool.failed_total > 0 ? "#ef4444" : "#475569", fontWeight: 700 }}>{spool.failed_total}</span> échecs
+        </span>
+      </div>
+    );
+  }
+
+  // ── Nouveau format spool_status ──────────────────────────────────────────────
+  const { queue, current_transfer, stats, disk, recent_failed, recent_done, config, uptime_s } = spool;
+  const ct = current_transfer;
+
+  function fmtUptime(s) {
+    if (!s) return "—";
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+  function fmtTime(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+    catch { return iso; }
+  }
+  function shortId(id) { return id ? String(id).slice(-8) : "—"; }
 
   return (
     <div style={{
       marginTop: 20,
-      border: "2px solid rgba(99,102,241,0.3)",
-      borderRadius: 12,
-      background: "rgba(6,12,30,0.95)",
-      padding: 20,
-      position: "relative",
-      boxShadow: "0 0 20px rgba(99,102,241,0.06)",
+      border: "1px solid rgba(99,102,241,0.2)",
+      borderRadius: 10,
+      background: "rgba(6,12,30,0.97)",
+      overflow: "hidden",
     }}>
-      {/* Label */}
+      {/* ── Header ── */}
       <div style={{
-        position: "absolute", top: -11, left: 20,
-        background: "#020817", padding: "0 10px",
-        color: "rgba(99,102,241,0.7)", fontSize: 9, fontWeight: 700,
-        textTransform: "uppercase", letterSpacing: 2,
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "10px 16px",
+        background: "rgba(99,102,241,0.06)",
+        borderBottom: "1px solid rgba(99,102,241,0.12)",
       }}>
-        SPOOL · INSPECT & UPLOAD
-      </div>
-
-      {/* Header stats */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
-        {/* Consumer status */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{
             width: 7, height: 7, borderRadius: "50%",
-            background: spool.consumer_ok ? "#22c55e" : "#ef4444",
-            boxShadow: spool.consumer_ok ? "0 0 5px #22c55e88" : undefined,
+            background: "#22c55e", boxShadow: "0 0 5px #22c55e88",
           }} />
-          <span style={{ color: spool.consumer_ok ? "#22c55e" : "#ef4444", fontSize: 10, fontWeight: 600 }}>
-            {spool.consumer_ok ? "CONSUMER ACTIF" : "CONSUMER INACTIF"}
+          <span style={{ color: "#22c55e", fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+            SPOOL ACTIF
           </span>
         </div>
-
-        <div style={{ width: 1, height: 14, background: "rgba(99,102,241,0.2)" }} />
-
-        {/* Counters */}
-        <span style={{ color: "#64748b", fontSize: 10 }}>
-          <span style={{ color: "#22c55e", fontWeight: 700 }}>{spool.processed_total}</span> traitées
-        </span>
-        <span style={{ color: "#64748b", fontSize: 10 }}>
-          <span style={{ color: spool.failed_total > 0 ? "#ef4444" : "#475569", fontWeight: 700 }}>{spool.failed_total}</span> échecs
-        </span>
-        <span style={{ color: "#64748b", fontSize: 10 }}>
-          <span style={{ color: "#f59e0b", fontWeight: 700 }}>{spool.active.length}</span> en cours
-        </span>
+        <span style={{ color: "#1e3a5f", fontSize: 9 }}>|</span>
+        <span style={{ color: "#334155", fontSize: 9 }}>uptime {fmtUptime(uptime_s)}</span>
+        {config && (
+          <>
+            <span style={{ color: "#1e3a5f", fontSize: 9 }}>|</span>
+            <span style={{ color: "#334155", fontSize: 9 }}>
+              {config.workers}w · retry×{config.max_retries} · NAS {config.nas_host}:{config.nas_port}
+            </span>
+          </>
+        )}
       </div>
 
-      {!hasActivity && (
-        <p style={{ color: "#1e293b", fontSize: 11, textAlign: "center", padding: "20px 0" }}>
-          En attente de sessions…
-        </p>
-      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0 }}>
 
-      {/* Sessions actives */}
-      {spool.active.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <p style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>
-            EN COURS ({spool.active.length})
-          </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {spool.active.map(sess => (
-              <ActiveSessionCard key={sess.session_id} sess={sess} />
-            ))}
+        {/* ── Colonne 1 : Stats ── */}
+        <div style={{ padding: "14px 16px", borderRight: "1px solid rgba(99,102,241,0.1)" }}>
+          <div style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
+            Statistiques
           </div>
+          {stats && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {[
+                { label: "Traités aujourd'hui", value: stats.processed_today,  color: "#22c55e" },
+                { label: "Transférés NAS",       value: stats.forwarded_to_nas, color: "#22d3ee" },
+                { label: "Jobs total",            value: stats.total_jobs,       color: "#94a3b8" },
+                { label: "Terminés",              value: stats.done,             color: "#22c55e" },
+                { label: "En cours",              value: stats.processing,       color: "#f59e0b" },
+                { label: "Échecs total",          value: stats.failed_total,     color: stats.failed_total > 0 ? "#ef4444" : "#475569" },
+                { label: "Taux d'échec",          value: stats.fail_pct != null ? stats.fail_pct.toFixed(1) + "%" : "—", color: stats.fail_pct > 5 ? "#ef4444" : "#475569" },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                  <span style={{ color: "#334155" }}>{label}</span>
+                  <span style={{ color, fontWeight: 700 }}>{value ?? "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
 
-      {/* Historique */}
-      {spool.history.length > 0 && (
-        <div>
-          <p style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, marginBottom: 6 }}>
-            HISTORIQUE RÉCENT
-          </p>
-          <div style={{ border: "1px solid rgba(99,102,241,0.12)", borderRadius: 6, overflow: "hidden" }}>
-            {spool.history.slice(0, 10).map((sess, i) => (
-              <HistoryRow key={sess.session_id + i} sess={sess} index={i} />
+        {/* ── Colonne 2 : Transfert en cours + File ── */}
+        <div style={{ padding: "14px 16px", borderRight: "1px solid rgba(99,102,241,0.1)" }}>
+          {/* Transfert actif */}
+          <div style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
+            Transfert en cours
+          </div>
+          {ct ? (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 6 }}>
+                <span style={{ color: "#94a3b8", fontFamily: "monospace" }}>
+                  PC-{String(ct.from_pc).padStart(2, "0")} · {shortId(ct.session_id)}
+                </span>
+                <span style={{ color: "#f59e0b", fontWeight: 700 }}>{ct.speed_mbps?.toFixed(1)} Mb/s</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <SpoolProgressBar pct={ct.progress_pct ?? 0} color="#f59e0b" />
+                <span style={{ color: "#f59e0b", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                  {ct.progress_pct ?? 0}%
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ color: "#1e293b", fontSize: 10, marginBottom: 14 }}>Aucun transfert actif</div>
+          )}
+
+          {/* File d'attente */}
+          <div style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
+            File ({queue?.count ?? 0} · {queue?.total_mb ? (queue.total_mb / 1024).toFixed(2) + " GB" : "0 MB"})
+          </div>
+          {queue?.entries?.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              {queue.entries.slice(0, 6).map((e, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "3px 6px",
+                  background: "rgba(255,255,255,0.02)", borderRadius: 3, fontSize: 9,
+                }}>
+                  <span style={{ color: "#6366f1", fontWeight: 700, flexShrink: 0 }}>
+                    PC-{String(e.pc_id).padStart(2, "0")}
+                  </span>
+                  <span style={{ color: "#334155", fontFamily: "monospace", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {shortId(e.session_id)}
+                  </span>
+                  <span style={{ color: "#475569", flexShrink: 0 }}>{e.size_mb?.toFixed(0)} MB</span>
+                  <span style={{ color: "#1e293b", flexShrink: 0 }}>{fmtTime(e.received_at)}</span>
+                </div>
+              ))}
+              {queue.entries.length > 6 && (
+                <div style={{ color: "#334155", fontSize: 9, paddingLeft: 6 }}>+{queue.entries.length - 6} de plus…</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ color: "#1e293b", fontSize: 10 }}>File vide</div>
+          )}
+        </div>
+
+        {/* ── Colonne 3 : Disques + Récents ── */}
+        <div style={{ padding: "14px 16px" }}>
+          {/* Disques */}
+          <div style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
+            Stockage
+          </div>
+          {disk && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+              <SpoolDiskBar label="Inbox"      d={disk.inbox} />
+              <SpoolDiskBar label="Spool"      d={disk.spool} />
+              <SpoolDiskBar label="Quarantine" d={disk.quarantine} />
+            </div>
+          )}
+
+          {/* Échecs récents */}
+          {recent_failed?.length > 0 && (
+            <>
+              <div style={{ color: "rgba(239,68,68,0.5)", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>
+                Échecs récents
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                {recent_failed.slice(0, 3).map((f, i) => (
+                  <div key={i} style={{
+                    background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.12)",
+                    borderRadius: 3, padding: "4px 7px", fontSize: 9,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                      <span style={{ color: "#ef4444", fontWeight: 700 }}>
+                        PC-{String(f.sender).padStart(2, "0")} · {shortId(f.job_id)}
+                      </span>
+                      <span style={{ color: "#475569" }}>×{f.attempts}</span>
+                    </div>
+                    <div style={{ color: "#7f1d1d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {f.error}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Footer : terminés récents ── */}
+      {recent_done?.length > 0 && (
+        <div style={{ borderTop: "1px solid rgba(99,102,241,0.08)", padding: "8px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ color: "rgba(99,102,241,0.4)", fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", flexShrink: 0 }}>
+              Récents
+            </span>
+            {recent_done.slice(0, 8).map((d, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 9 }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
+                <span style={{ color: "#334155", fontFamily: "monospace" }}>
+                  PC-{String(d.sender).padStart(2, "0")}
+                </span>
+                <span style={{ color: "#1e293b" }}>{d.size_mb?.toFixed(0)} MB</span>
+                <span style={{ color: "#0f172a" }}>{fmtTime(d.completed_at)}</span>
+              </div>
             ))}
           </div>
         </div>

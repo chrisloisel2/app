@@ -66,12 +66,14 @@ SPOOL_HISTORY_MAX  = 20    # nombre de sessions terminées conservées
 # }
 # history: liste des sessions terminées (pipeline/completed ou nacked), max 20
 _spool = {
-    "active":        {},   # session_id -> dict
+    "active":        {},   # session_id -> dict (ancien format, conservé)
     "history":       [],   # liste chronologique inversée (plus récent en tête)
     "consumer_ok":   False,
     "last_ts":       None,
     "processed_total":  0,
     "failed_total":     0,
+    # Nouveau format spool_status — remplacé à chaque message
+    "snapshot":      None,
 }
 
 # Champs visuels SalleReporter qui déclenchent une notification WS si changés
@@ -432,8 +434,10 @@ def _finish_session(session_id: str, outcome: str):
 
 
 def get_spool_snapshot() -> dict:
-    """Snapshot of inspect_session spool state."""
+    """Snapshot of spool state — prioritise nouveau format spool_status."""
     with _state_lock:
+        if _spool["snapshot"] is not None:
+            return _spool["snapshot"]
         return {
             "consumer_ok":      _spool["consumer_ok"],
             "last_ts":          _spool["last_ts"],
@@ -469,8 +473,14 @@ def _process_message(raw_value: bytes):
         if "source" in msg and msg["source"] == "pc":
             # SalleReporter — état upload poste
             should_notify = _handle_salle_reporter(msg, now)
+        elif "source" in msg and msg["source"] == "spool_status":
+            # Nouveau format spool_status complet
+            _spool["snapshot"] = msg
+            _spool["last_ts"]  = msg.get("ts")
+            _spool["consumer_ok"] = True
+            should_notify = True
         elif "source" in msg and msg["source"] == "inspect_session":
-            # inspect_session spool — pipeline d'inspection/upload
+            # inspect_session spool — pipeline d'inspection/upload (ancien format)
             should_notify = _handle_inspect_session(msg)
         elif "type" in msg:
             # KafkaEventPublisher — événement cycle de vie
@@ -622,14 +632,17 @@ def get_stations_snapshot() -> dict:
         connected_count = sum(1 for s in stations if s["connected"])
         recording_count = sum(1 for s in stations if s["connected"] and s["recording"]["is_recording"])
 
-        spool = {
-            "consumer_ok":     _spool["consumer_ok"],
-            "last_ts":         _spool["last_ts"],
-            "processed_total": _spool["processed_total"],
-            "failed_total":    _spool["failed_total"],
-            "active":          list(_spool["active"].values()),
-            "history":         list(_spool["history"]),
-        }
+        if _spool["snapshot"] is not None:
+            spool = _spool["snapshot"]
+        else:
+            spool = {
+                "consumer_ok":     _spool["consumer_ok"],
+                "last_ts":         _spool["last_ts"],
+                "processed_total": _spool["processed_total"],
+                "failed_total":    _spool["failed_total"],
+                "active":          list(_spool["active"].values()),
+                "history":         list(_spool["history"]),
+            }
 
         return {
             "connected":   _state["connected"],
