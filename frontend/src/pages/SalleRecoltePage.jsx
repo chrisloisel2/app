@@ -573,22 +573,6 @@ function SpoolSection({ spool }) {
   );
 }
 
-// ── Clé visuelle (évite re-render inutile) ───────────────────────────────────
-function stationVisualKey(st) {
-  return [
-    st._never_seen ? "n" : st.connected ? "c" : "d",
-    st.operator ?? "",
-    st.scenario ?? "",
-    st.alert ? 1 : 0,
-    st.recording?.is_recording ? 1 : 0,
-    st.recording?.failed ? 1 : 0,
-    st.upload?.status ?? "",
-    Object.keys(st.trackers || {}).length,
-    st.grippers?.right?.connected ? 1 : 0,
-    st.grippers?.left?.connected  ? 1 : 0,
-  ].join("|");
-}
-
 // ── Horodatage isolé ──────────────────────────────────────────────────────────
 function LastUpdateLabel({ lastUpdateRef }) {
   const [display, setDisplay] = useState("—");
@@ -615,10 +599,8 @@ export default function SalleRecoltePage() {
   const [meta, setMeta]               = useState({ connected: false, errors: [] });
   const [spool, setSpool]             = useState(null);
   const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(null);
   const [selectedPc, setSelectedPc]   = useState(null);
 
-  const prevKeysRef  = useRef({});
   const prevMetaRef  = useRef(null);
   const lastUpdateRef = useRef(null);
 
@@ -627,8 +609,7 @@ export default function SalleRecoltePage() {
   }, []);
 
   const handleMessage = useCallback((msg) => {
-    setLoading(prev => prev ? false : prev);
-    setError(prev => prev ? null : prev);
+    setLoading(false);
 
     lastUpdateRef.current = msg.last_update;
     const metaKey = `${msg.connected}|${(msg.errors ?? []).length}`;
@@ -640,20 +621,13 @@ export default function SalleRecoltePage() {
     if (msg.spool !== undefined) setSpool(msg.spool);
 
     const incoming = msg.stations ?? [];
-    const changed  = [];
-    for (const st of incoming) {
-      const pcId = stationToPcId(st.station_id);
-      if (!pcId) continue;
-      const key = stationVisualKey(st);
-      if (prevKeysRef.current[pcId] !== key) {
-        prevKeysRef.current[pcId] = key;
-        changed.push({ ...st, pc_id: pcId });
-      }
-    }
-    if (changed.length > 0) {
+    if (incoming.length > 0) {
       setStationsMap(prev => {
         const next = new Map(prev);
-        for (const st of changed) next.set(st.pc_id, st);
+        for (const st of incoming) {
+          const pcId = stationToPcId(st.station_id);
+          if (pcId) next.set(pcId, { ...st, pc_id: pcId });
+        }
         return next;
       });
     }
@@ -670,9 +644,8 @@ export default function SalleRecoltePage() {
       ws.onmessage = (e) => {
         try { handleMessage(JSON.parse(e.data)); } catch { /* ignore */ }
       };
-      ws.onerror = () => setError("WebSocket : erreur de connexion");
+      ws.onerror = () => {};
       ws.onclose = () => {
-        setError("WebSocket déconnecté — reconnexion…");
         reconnectTimer = setTimeout(connect, 2000);
       };
     };

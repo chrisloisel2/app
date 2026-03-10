@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import axios from "axios";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 
-// ── Palette ──────────────────────────────────────────────────────────────────
+// ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
   bg:          "#0d0e1a",
   bgSurface:   "#12141f",
@@ -38,16 +37,17 @@ const ALERT_TIMEOUT_S = 120;
 
 // ── Column definitions ────────────────────────────────────────────────────────
 const COLUMNS = [
-  { key: "station",    label: "Station",      w: "8rem",  align: "left"   },
-  { key: "operator",   label: "Opérateur",    w: "9rem",  align: "left"   },
-  { key: "scenario",   label: "Scénario",     w: "11rem", align: "left"   },
-  { key: "cameras",    label: "Caméras",      w: "6rem",  align: "center" },
-  { key: "pince_r",    label: "PinD",         w: "4rem",  align: "center" },
-  { key: "pince_l",    label: "PinG",         w: "4rem",  align: "center" },
-  { key: "trackers",   label: "Trackers",     w: "10rem", align: "center" },
-  { key: "rec",        label: "REC",          w: "5rem",  align: "center" },
-  { key: "duration",   label: "Durée",        w: "5rem",  align: "center" },
-  { key: "ts",         label: "MAJ",          w: "6rem",  align: "center" },
+  { key: "station",  label: "Station",      w: "8rem",  align: "left"   },
+  { key: "operator", label: "Opérateur",    w: "9rem",  align: "left"   },
+  { key: "scenario", label: "Scénario",     w: "11rem", align: "left"   },
+  { key: "cameras",  label: "Caméras",      w: "6rem",  align: "center" },
+  { key: "pince_r",  label: "PinD",         w: "4rem",  align: "center" },
+  { key: "pince_l",  label: "PinG",         w: "4rem",  align: "center" },
+  { key: "trackers", label: "Trackers",     w: "10rem", align: "center" },
+  { key: "integ",    label: "Intégrité",    w: "6rem",  align: "center" },
+  { key: "rec",      label: "REC",          w: "5rem",  align: "center" },
+  { key: "duration", label: "Durée",        w: "5rem",  align: "center" },
+  { key: "ts",       label: "MAJ",          w: "6rem",  align: "center" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -78,18 +78,19 @@ function recordingColor(rec, connected) {
   return "grey";
 }
 
+function fmtAlertTs(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 // ── StatCard ──────────────────────────────────────────────────────────────────
 function StatCard({ icon, label, value, accent }) {
   return (
     <div style={{
-      background: C.bgCard,
-      border: `1px solid ${C.border}`,
-      borderRadius: 8,
-      padding: "14px 20px",
-      minWidth: 130,
-      position: "relative",
-      overflow: "hidden",
-      flex: "0 0 auto",
+      background: C.bgCard, border: `1px solid ${C.border}`,
+      borderRadius: 8, padding: "14px 20px",
+      minWidth: 130, position: "relative", overflow: "hidden", flex: "0 0 auto",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <span style={{ color: accent, fontSize: 15 }}>{icon}</span>
@@ -106,72 +107,92 @@ function StatCard({ icon, label, value, accent }) {
 }
 
 // ── Cell ──────────────────────────────────────────────────────────────────────
-function Cell({ children, fg, bg, align = "center", style = {} }) {
+function Cell({ children, fg, bg, align = "center", style = {}, onClick, title }) {
   return (
-    <td style={{
-      color: fg || C.text,
-      background: bg || "transparent",
-      textAlign: align,
-      fontFamily: "monospace",
-      fontSize: 12,
-      fontWeight: 600,
-      padding: "6px 6px",
-      borderRight: `1px solid ${C.border}`,
-      whiteSpace: "nowrap",
-      ...style,
-    }}>
+    <td
+      onClick={onClick}
+      title={title}
+      style={{
+        color: fg || C.text,
+        background: bg || "transparent",
+        textAlign: align,
+        fontFamily: "monospace",
+        fontSize: 12,
+        fontWeight: 600,
+        padding: "6px 6px",
+        borderRight: `1px solid ${C.border}`,
+        whiteSpace: "nowrap",
+        cursor: onClick ? "pointer" : undefined,
+        ...style,
+      }}>
       {children}
     </td>
   );
 }
 
 // ── TrackersSummary ───────────────────────────────────────────────────────────
-function TrackersSummary({ trackers, connected }) {
+const TrackersSummary = memo(function TrackersSummary({ trackers, connected }) {
   const list = Object.values(trackers || {});
-  if (!connected || list.length === 0) {
-    return <span style={{ color: C.grey }}>—</span>;
-  }
+  if (!connected || list.length === 0) return <span style={{ color: C.grey }}>—</span>;
   return (
     <span style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
       {list.map((t) => {
         const col = !t.tracking ? FG.warn : (t.battery !== undefined && t.battery < 0.05 ? FG.error : FG.ok);
-        const label = `T${t.idx}`;
-        const title = [
-          t.serial,
-          t.tracking ? "tracking OK" : "tracking PERDU",
+        const title = [t.serial, t.tracking ? "tracking OK" : "tracking PERDU",
           t.battery !== undefined ? `bat ${Math.round(t.battery * 100)}%` : null,
         ].filter(Boolean).join(" · ");
         return (
           <span key={t.idx} title={title} style={{ color: col, fontSize: 11 }}>
-            {t.tracking ? "●" : "▲"}{label}
+            {t.tracking ? "●" : "▲"}T{t.idx}
           </span>
         );
       })}
     </span>
   );
+});
+
+// ── IntegrityCellBadge ────────────────────────────────────────────────────────
+function IntegrityCellBadge({ alerts, onSelect }) {
+  if (!alerts || alerts.length === 0) return <span style={{ color: C.grey }}>—</span>;
+  const latest = alerts[0];
+  const hasError = latest.issues?.length > 0;
+  const hasWarn  = latest.warnings?.length > 0;
+  const color = hasError ? C.error : hasWarn ? C.warn : C.ok;
+  const label = hasError
+    ? `${latest.issues.length} ERR`
+    : hasWarn
+    ? `${latest.warnings.length} WARN`
+    : "OK";
+  return (
+    <span
+      onClick={onSelect}
+      title="Voir les alertes d'intégrité"
+      style={{
+        color, fontWeight: 700, fontSize: 11, cursor: "pointer",
+        borderBottom: `1px dashed ${color}`,
+      }}
+    >
+      ⚠ {label}
+    </span>
+  );
 }
 
 // ── StationRow ────────────────────────────────────────────────────────────────
-function StationRow({ station, rowIndex }) {
-  const bg = rowIndex % 2 === 0 ? C.bgRow : C.bgRowAlt;
-  const rc = recordingColor(station.recording, station.connected);
+const StationRow = memo(function StationRow({ station, rowIndex, onSelectInteg }) {
+  const bg  = rowIndex % 2 === 0 ? C.bgRow : C.bgRowAlt;
+  const rc  = recordingColor(station.recording, station.connected);
   const recSym = station.recording?.is_recording ? "⏺ REC" : "⏹ OFF";
   const cameras = station.cameras || [];
   const matchedCams = cameras.filter(c => c.db_match).length;
 
+  const handleSelectInteg = useCallback(() => onSelectInteg(station.station_id), [onSelectInteg, station.station_id]);
+
   return (
     <tr style={{ background: bg, opacity: station.connected ? 1 : 0.5 }}>
-      <Cell fg={C.accent} bg={bg} align="left">
-        {station.station_id}
-      </Cell>
-      <Cell fg={C.text} bg={bg} align="left">
-        {station.operator || "—"}
-      </Cell>
-      <Cell fg={C.textDim} bg={bg} align="left">
-        {station.scenario || "—"}
-      </Cell>
+      <Cell fg={C.accent} bg={bg} align="left">{station.station_id}</Cell>
+      <Cell fg={C.text}    bg={bg} align="left">{station.operator || "—"}</Cell>
+      <Cell fg={C.textDim} bg={bg} align="left">{station.scenario || "—"}</Cell>
 
-      {/* Caméras */}
       <Cell bg={bg}>
         {cameras.length > 0
           ? <span style={{ color: matchedCams === cameras.length ? FG.ok : FG.warn }}>
@@ -181,46 +202,248 @@ function StationRow({ station, rowIndex }) {
         }
       </Cell>
 
-      {/* Pince droite */}
-      <Cell bg={station.pinces?.right?.connected ? BG.ok : BG.grey}>
-        {connDot(station.pinces?.right?.connected)}
+      <Cell bg={station.grippers?.right?.connected ? BG.ok : BG.grey}>
+        {connDot(station.grippers?.right?.connected)}
+      </Cell>
+      <Cell bg={station.grippers?.left?.connected ? BG.ok : BG.grey}>
+        {connDot(station.grippers?.left?.connected)}
       </Cell>
 
-      {/* Pince gauche */}
-      <Cell bg={station.pinces?.left?.connected ? BG.ok : BG.grey}>
-        {connDot(station.pinces?.left?.connected)}
-      </Cell>
-
-      {/* Trackers */}
       <Cell bg={bg}>
         <TrackersSummary trackers={station.trackers} connected={station.connected} />
       </Cell>
 
-      {/* REC */}
-      <Cell fg={FG[rc]} bg={BG[rc]}>
-        {recSym}
+      <Cell bg={bg}>
+        <IntegrityCellBadge alerts={station.integrity_alerts} onSelect={handleSelectInteg} />
       </Cell>
 
-      {/* Durée */}
-      <Cell fg={FG[rc]} bg={BG[rc]}>
-        {fmtDuration(station.recording?.duration_s)}
-      </Cell>
-
-      {/* MAJ */}
-      <Cell fg={C.textDim} bg={bg}>
-        {formatTs(station.last_ts)}
-      </Cell>
+      <Cell fg={FG[rc]} bg={BG[rc]}>{recSym}</Cell>
+      <Cell fg={FG[rc]} bg={BG[rc]}>{fmtDuration(station.recording?.duration_s)}</Cell>
+      <Cell fg={C.textDim} bg={bg}>{formatTs(station.last_ts)}</Cell>
     </tr>
+  );
+});
+
+// ── IntegrityAlertPanel ───────────────────────────────────────────────────────
+function IntegrityAlertPanel({ stationId, alerts, onClose }) {
+  if (!stationId) return null;
+  return (
+    <div style={{
+      position: "fixed", right: 0, top: 0, bottom: 0, width: 360,
+      background: "rgba(10,11,21,0.98)",
+      border: `1px solid ${C.errorBorder}`,
+      borderRadius: "8px 0 0 8px",
+      boxShadow: "-4px 0 24px rgba(255,85,85,0.15)",
+      display: "flex", flexDirection: "column",
+      zIndex: 100,
+      fontFamily: "monospace",
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: "14px 16px",
+        borderBottom: `1px solid ${C.border}`,
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        flexShrink: 0,
+      }}>
+        <div>
+          <span style={{ color: C.error, fontWeight: 700, fontSize: 13 }}>
+            ⚠ Intégrité session
+          </span>
+          <span style={{ color: C.textDim, fontSize: 11, marginLeft: 8 }}>{stationId}</span>
+        </div>
+        <button onClick={onClose} style={{
+          color: C.textDim, background: "none", border: "none",
+          cursor: "pointer", fontSize: 16, padding: "0 4px",
+        }}>✕</button>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
+        {!alerts || alerts.length === 0 ? (
+          <p style={{ color: C.textMuted, fontSize: 12, textAlign: "center", marginTop: 40 }}>
+            Aucune alerte d'intégrité
+          </p>
+        ) : (
+          alerts.map((a, i) => {
+            const hasErrors = a.issues?.length > 0;
+            const hasWarns  = a.warnings?.length > 0;
+            const borderCol = hasErrors ? C.errorBorder : C.warnBorder;
+            const headerCol = hasErrors ? C.error : C.warn;
+            return (
+              <div key={i} style={{
+                background: hasErrors ? C.errorBg : C.warnBg,
+                border: `1px solid ${borderCol}`,
+                borderRadius: 6, padding: "10px 12px",
+                marginBottom: 10,
+              }}>
+                {/* Alert header */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ color: headerCol, fontWeight: 700, fontSize: 11 }}>
+                    {hasErrors ? "ERREUR" : "AVERTISSEMENT"}
+                  </span>
+                  <span style={{ color: C.textDim, fontSize: 10 }}>{fmtAlertTs(a.ts)}</span>
+                </div>
+
+                {/* Session info */}
+                {a.session_id && (
+                  <div style={{ color: C.textDim, fontSize: 10, marginBottom: 6 }}>
+                    <span style={{ color: C.textMuted }}>Session : </span>
+                    <span style={{ color: C.text }}>{a.session_id}</span>
+                  </div>
+                )}
+                {(a.operator || a.scenario) && (
+                  <div style={{ color: C.textDim, fontSize: 10, marginBottom: 6 }}>
+                    {a.operator && <span style={{ marginRight: 8 }}>
+                      <span style={{ color: C.textMuted }}>Op : </span>{a.operator}
+                    </span>}
+                    {a.scenario && <span>
+                      <span style={{ color: C.textMuted }}>Scén : </span>{a.scenario}
+                    </span>}
+                  </div>
+                )}
+
+                {/* Cameras */}
+                {(a.cameras_found?.length > 0 || a.cameras_missing_mp4?.length > 0 || a.cameras_missing_jsonl?.length > 0) && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ color: C.textMuted, fontSize: 9, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Caméras</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {a.cameras_found?.map(cam => {
+                        const missingMp4  = a.cameras_missing_mp4?.includes(cam);
+                        const missingJsonl = a.cameras_missing_jsonl?.includes(cam);
+                        const col = (missingMp4 || missingJsonl) ? C.error : C.ok;
+                        return (
+                          <span key={cam} style={{
+                            color: col, fontSize: 10,
+                            background: `${col}18`,
+                            border: `1px solid ${col}44`,
+                            borderRadius: 3, padding: "1px 5px",
+                          }}>
+                            {cam}
+                            {missingMp4   && " ✗MP4"}
+                            {missingJsonl && " ✗JSONL"}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Errors */}
+                {a.issues?.length > 0 && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ color: C.textMuted, fontSize: 9, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Erreurs</div>
+                    {a.issues.map((issue, j) => (
+                      <div key={j} style={{
+                        color: C.error, fontSize: 10,
+                        padding: "2px 0",
+                        borderLeft: `2px solid ${C.error}`,
+                        paddingLeft: 6, marginBottom: 2,
+                      }}>
+                        {issue}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Warnings */}
+                {a.warnings?.length > 0 && (
+                  <div>
+                    <div style={{ color: C.textMuted, fontSize: 9, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Avertissements</div>
+                    {a.warnings.map((w, j) => (
+                      <div key={j} style={{
+                        color: C.warn, fontSize: 10,
+                        borderLeft: `2px solid ${C.warn}`,
+                        paddingLeft: 6, marginBottom: 2,
+                      }}>
+                        {w}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── GlobalIntegrityBanner ─────────────────────────────────────────────────────
+function GlobalIntegrityBanner({ stations, onSelect }) {
+  // Collect the most recent error across all stations
+  const alerts = useMemo(() => {
+    const out = [];
+    for (const st of stations) {
+      for (const a of (st.integrity_alerts || [])) {
+        if (a.issues?.length > 0 || a.warnings?.length > 0) {
+          out.push({ ...a, station_id: st.station_id });
+        }
+      }
+    }
+    out.sort((a, b) => b.ts - a.ts);
+    return out.slice(0, 5);
+  }, [stations]);
+
+  if (alerts.length === 0) return null;
+
+  return (
+    <div style={{
+      margin: "12px 24px 0",
+      background: C.errorBg,
+      border: `1px solid ${C.errorBorder}`,
+      borderRadius: 6, padding: "10px 14px",
+      flexShrink: 0,
+    }}>
+      <div style={{ color: C.error, fontWeight: 700, fontSize: 11, marginBottom: 6, letterSpacing: "0.06em" }}>
+        ⚠ ALERTES D'INTÉGRITÉ SESSION ({alerts.length})
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {alerts.map((a, i) => (
+          <div
+            key={i}
+            onClick={() => onSelect(a.station_id)}
+            style={{
+              display: "flex", alignItems: "center", gap: 10,
+              cursor: "pointer", padding: "3px 6px",
+              borderRadius: 4,
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,85,85,0.08)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <span style={{ color: C.accent, fontWeight: 700, fontSize: 11, flexShrink: 0, minWidth: 60 }}>
+              {a.station_id}
+            </span>
+            <span style={{ color: C.textDim, fontSize: 10, flexShrink: 0 }}>
+              {fmtAlertTs(a.ts)}
+            </span>
+            {a.issues?.length > 0 && (
+              <span style={{ color: C.error, fontSize: 10 }}>
+                {a.issues[0]}
+                {a.issues.length > 1 && ` (+${a.issues.length - 1})`}
+              </span>
+            )}
+            {a.issues?.length === 0 && a.warnings?.length > 0 && (
+              <span style={{ color: C.warn, fontSize: 10 }}>
+                {a.warnings[0]}
+                {a.warnings.length > 1 && ` (+${a.warnings.length - 1})`}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function OrchestrateurPage() {
-  const [data, setData]             = useState(null);
-  const [clock, setClock]           = useState("");
-  const [blink, setBlink]           = useState(true);
-  const [kafkaStatus, setKafkaStatus] = useState("connecting");
-  const intervalRef = useRef(null);
+  const [data, setData]                 = useState(null);
+  const [clock, setClock]               = useState("");
+  const [blink, setBlink]               = useState(true);
+  const [kafkaStatus, setKafkaStatus]   = useState("connecting");
+  const [selectedInteg, setSelectedInteg] = useState(null); // station_id
 
   // Clock
   useEffect(() => {
@@ -230,36 +453,55 @@ export default function OrchestrateurPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Blink dot
+  // Blink
   useEffect(() => {
     const id = setInterval(() => setBlink(b => !b), 900);
     return () => clearInterval(id);
   }, []);
 
-  // Poll backend
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await axios.get("/api/orchestrateur");
-      setData(res.data);
-      setKafkaStatus(res.data.connected ? "connected" : "disconnected");
-    } catch {
-      setKafkaStatus("error");
-    }
+  // WebSocket
+  const handleMessage = useCallback((msg) => {
+    setData(msg);
+    setKafkaStatus(msg.connected ? "connected" : "disconnected");
   }, []);
 
   useEffect(() => {
-    fetchData();
-    intervalRef.current = setInterval(fetchData, 1000);
-    return () => clearInterval(intervalRef.current);
-  }, [fetchData]);
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const url   = `${proto}://${window.location.host}/api/salle/ws`;
+    let ws;
+    let reconnectTimer;
+
+    const connect = () => {
+      ws = new WebSocket(url);
+      ws.onmessage = (e) => {
+        try { handleMessage(JSON.parse(e.data)); } catch { /* ignore */ }
+      };
+      ws.onerror = () => { setKafkaStatus("error"); };
+      ws.onclose = () => {
+        setKafkaStatus("disconnected");
+        reconnectTimer = setTimeout(connect, 2000);
+      };
+    };
+
+    connect();
+    return () => { clearTimeout(reconnectTimer); ws?.close(); };
+  }, [handleMessage]);
 
   const stats    = data?.stats    ?? { total: 0, connected: 0, recording: 0, disconnected: 0 };
   const stations = data?.stations ?? [];
 
+  const handleSelectInteg = useCallback((stationId) => {
+    setSelectedInteg(prev => prev === stationId ? null : stationId);
+  }, []);
+
+  const selectedStation = selectedInteg
+    ? stations.find(s => s.station_id === selectedInteg)
+    : null;
+
   const statusLabel = {
-    connected:    `✓  192.168.88.4:9092  [monitoring]`,
-    disconnected: `—  192.168.88.4:9092  Déconnecté`,
-    error:        `⚠  192.168.88.4:9092  Erreur`,
+    connected:    `✓  [monitoring]  WebSocket`,
+    disconnected: `—  Déconnecté`,
+    error:        `⚠  Erreur`,
     connecting:   `… Connexion…`,
   }[kafkaStatus] ?? kafkaStatus;
 
@@ -279,13 +521,9 @@ export default function OrchestrateurPage() {
         </div>
 
         <div style={{
-          background: C.bgCard,
-          border: `1px solid ${C.border}`,
-          borderRadius: 4,
-          padding: "6px 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
+          background: C.bgCard, border: `1px solid ${C.border}`,
+          borderRadius: 4, padding: "6px 12px",
+          display: "flex", alignItems: "center", gap: 8,
         }}>
           <div style={{
             width: 8, height: 8, borderRadius: "50%",
@@ -302,7 +540,16 @@ export default function OrchestrateurPage() {
         <StatCard icon="●" label="Connectées"       value={stats.connected}    accent={C.ok}     />
         <StatCard icon="⏺" label="Enregistrements" value={stats.recording}    accent={C.rec}    />
         <StatCard icon="○" label="Déconnectées"     value={stats.disconnected} accent={C.grey}   />
+        <StatCard
+          icon="⚠"
+          label="Alertes intégrité"
+          value={stations.filter(s => s.integrity_alerts?.length > 0).length}
+          accent={stations.some(s => s.integrity_alerts?.some(a => a.issues?.length > 0)) ? C.error : C.warn}
+        />
       </div>
+
+      {/* Global integrity banner */}
+      <GlobalIntegrityBanner stations={stations} onSelect={handleSelectInteg} />
 
       {/* Table */}
       <div style={{ padding: "18px 24px 20px", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -312,14 +559,9 @@ export default function OrchestrateurPage() {
         </div>
 
         <div style={{
-          flex: 1,
-          border: `1px solid ${C.border}`,
-          borderRadius: 4,
-          background: C.bgSurface,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          minHeight: 0,
+          flex: 1, border: `1px solid ${C.border}`, borderRadius: 4,
+          background: C.bgSurface, display: "flex", flexDirection: "column",
+          overflow: "hidden", minHeight: 0,
         }}>
           <div style={{ overflowX: "auto", overflowY: "auto", flex: 1 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -330,13 +572,9 @@ export default function OrchestrateurPage() {
                 <tr style={{ background: C.bgHeader }}>
                   {COLUMNS.map(col => (
                     <th key={col.key} style={{
-                      color: C.textDim,
-                      fontSize: 10,
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      textAlign: "center",
-                      padding: "8px 4px",
+                      color: C.textDim, fontSize: 10, fontWeight: 700,
+                      textTransform: "uppercase", letterSpacing: "0.06em",
+                      textAlign: "center", padding: "8px 4px",
                       borderRight: `1px solid ${C.border}`,
                       borderBottom: `1px solid ${C.borderLight}`,
                       whiteSpace: "nowrap",
@@ -350,10 +588,8 @@ export default function OrchestrateurPage() {
                 {stations.length === 0 ? (
                   <tr>
                     <td colSpan={COLUMNS.length} style={{
-                      textAlign: "center",
-                      color: C.textMuted,
-                      padding: "60px 0",
-                      fontSize: 13,
+                      textAlign: "center", color: C.textMuted,
+                      padding: "60px 0", fontSize: 13,
                     }}>
                       {kafkaStatus === "connecting"
                         ? "Connexion au broker Kafka…"
@@ -362,7 +598,12 @@ export default function OrchestrateurPage() {
                   </tr>
                 ) : (
                   stations.map((st, i) => (
-                    <StationRow key={st.station_id} station={st} rowIndex={i} />
+                    <StationRow
+                      key={st.station_id}
+                      station={st}
+                      rowIndex={i}
+                      onSelectInteg={handleSelectInteg}
+                    />
                   ))
                 )}
               </tbody>
@@ -370,6 +611,13 @@ export default function OrchestrateurPage() {
           </div>
         </div>
       </div>
+
+      {/* Integrity detail panel */}
+      <IntegrityAlertPanel
+        stationId={selectedInteg}
+        alerts={selectedStation?.integrity_alerts}
+        onClose={() => setSelectedInteg(null)}
+      />
     </div>
   );
 }

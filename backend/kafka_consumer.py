@@ -76,18 +76,10 @@ _spool = {
     "snapshot":      None,
 }
 
-# Champs visuels SalleReporter qui déclenchent une notification WS si changés
-_PC_WATCHED_FIELDS = {
-    "operator_username", "is_recording", "has_alert",
-    "sqlite_queue", "last_send", "_disconnected", "hostname",
-}
-
-
-def _pc_visual_changed(prev: dict, next_msg: dict) -> bool:
-    for field in _PC_WATCHED_FIELDS:
-        if prev.get(field) != next_msg.get(field):
-            return True
-    return False
+# session_integrity_error alerts — keyed by station_id
+# station_id -> list of alert dicts (most recent first, max 10)
+_integrity_alerts: dict = {}
+INTEGRITY_ALERTS_MAX = 10
 
 
 def _get_bootstrap_server():
@@ -140,13 +132,8 @@ def _handle_salle_reporter(msg: dict, now: str):
             "last_seen_at": now,
         }
 
-    if _pc_visual_changed(prev, new_state):
-        _state["pcs"][pc_id] = new_state
-        return True
-    else:
-        if not msg.get("disconnected"):
-            prev["last_seen_at"] = now
-        return False
+    _state["pcs"][pc_id] = new_state
+    return True
 
 
 # ── KafkaEventPublisher handler ───────────────────────────────────────────────
@@ -310,6 +297,23 @@ def _handle_event(msg: dict) -> bool:
             "session_id": msg.get("session_id"),
             "error":      msg.get("error", ""),
         }
+
+    elif event_type == "session_integrity_error":
+        alert = {
+            "ts":                    ts,
+            "session_id":            msg.get("session_id", ""),
+            "operator":              msg.get("operator", ""),
+            "scenario":              msg.get("scenario", ""),
+            "is_failed":             bool(msg.get("is_failed", False)),
+            "issues":                list(msg.get("issues", [])),
+            "warnings":              list(msg.get("warnings", [])),
+            "cameras_found":         list(msg.get("cameras_found", [])),
+            "cameras_missing_mp4":   list(msg.get("cameras_missing_mp4", [])),
+            "cameras_missing_jsonl": list(msg.get("cameras_missing_jsonl", [])),
+        }
+        alerts = _integrity_alerts.get(station_id, [])
+        alerts.insert(0, alert)
+        _integrity_alerts[station_id] = alerts[:INTEGRITY_ALERTS_MAX]
 
     else:
         logger.debug("KafkaEventPublisher: unknown event type '%s'", event_type)
@@ -615,17 +619,18 @@ def get_stations_snapshot() -> dict:
                     connected = False
 
             stations.append({
-                "station_id": st["station_id"],
-                "operator":   st["operator"],
-                "scenario":   st["scenario"],
-                "alert":      bool(st.get("alert", False)),
-                "cameras":    list(st["cameras"]),
-                "grippers":   dict(st["grippers"]),
-                "trackers":   dict(st["trackers"]),
-                "recording":  dict(st["recording"]),
-                "upload":     dict(st["upload"]) if st.get("upload") else None,
-                "connected":  connected,
-                "last_ts":    st["last_ts"],
+                "station_id":       st["station_id"],
+                "operator":         st["operator"],
+                "scenario":         st["scenario"],
+                "alert":            bool(st.get("alert", False)),
+                "cameras":          list(st["cameras"]),
+                "grippers":         dict(st["grippers"]),
+                "trackers":         dict(st["trackers"]),
+                "recording":        dict(st["recording"]),
+                "upload":           dict(st["upload"]) if st.get("upload") else None,
+                "connected":        connected,
+                "last_ts":          st["last_ts"],
+                "integrity_alerts": list(_integrity_alerts.get(st["station_id"], [])),
             })
 
         total = len(stations)
