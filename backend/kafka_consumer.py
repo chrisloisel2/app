@@ -435,6 +435,12 @@ def _finish_session(session_id: str, outcome: str):
     _spool["history"].insert(0, sess)
     if len(_spool["history"]) > SPOOL_HISTORY_MAX:
         _spool["history"] = _spool["history"][:SPOOL_HISTORY_MAX]
+    # Invalider le cache NAS pour cette session
+    try:
+        import cache_manager
+        cache_manager.on_session_completed(session_id)
+    except Exception:
+        pass
 
 
 def get_spool_snapshot() -> dict:
@@ -483,6 +489,15 @@ def _process_message(raw_value: bytes):
             _spool["last_ts"]  = msg.get("ts")
             _spool["consumer_ok"] = True
             should_notify = True
+            # Si des sessions viennent d'être complétées, invalider le cache
+            try:
+                import cache_manager
+                for item in msg.get("history", []):
+                    sid = item.get("session_id", "")
+                    if sid:
+                        cache_manager.on_session_completed(sid)
+            except Exception:
+                pass
         elif "source" in msg and msg["source"] == "inspect_session":
             # inspect_session spool — pipeline d'inspection/upload (ancien format)
             should_notify = _handle_inspect_session(msg)

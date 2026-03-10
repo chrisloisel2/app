@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 import config
+import cache_manager
 
 SESSION_RE = re.compile(r"^session_")
 
@@ -88,8 +89,7 @@ def _read_csv(path: str, fields: list[str], limit: int = 0, offset: int = 0) -> 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def list_sessions() -> list[str]:
-    """Return sorted list of session IDs (folder names) on the NAS."""
+def _list_sessions_raw() -> list[str]:
     base = _sessions_dir()
     if not os.path.isdir(base):
         return []
@@ -98,6 +98,11 @@ def list_sessions() -> list[str]:
          if SESSION_RE.match(d) and os.path.isdir(os.path.join(base, d))],
         reverse=True,
     )
+
+
+def list_sessions() -> list[str]:
+    """Return sorted list of session IDs (folder names) on the NAS. Cached."""
+    return cache_manager.get_sessions_list(_list_sessions_raw)
 
 
 def session_exists(session_id: str) -> bool:
@@ -120,7 +125,7 @@ def get_pince_rows(session_id: str, table: str, limit: int = 100, offset: int = 
     return _read_csv(path, PINCE_FIELDS, limit=limit, offset=offset)
 
 
-def get_tracker_stats(session_id: str) -> dict:
+def _get_tracker_stats_raw(session_id: str) -> dict:
     """Compute summary stats for tracker_positions without loading all rows at once."""
     path = os.path.join(_session_path(session_id), "tracker_positions.csv")
     if not os.path.exists(path):
@@ -176,7 +181,12 @@ def get_tracker_stats(session_id: str) -> dict:
     return result
 
 
-def get_pince_stats(session_id: str) -> list[dict]:
+def get_tracker_stats(session_id: str) -> dict:
+    """Cached wrapper around _get_tracker_stats_raw."""
+    return cache_manager.get_tracker_stats(session_id, lambda: _get_tracker_stats_raw(session_id))
+
+
+def _get_pince_stats_raw(session_id: str) -> list[dict]:
     """Aggregate stats for pince1 + pince2 combined, grouped by pince_id."""
     stats: dict[str, dict] = {}
 
@@ -219,7 +229,12 @@ def get_pince_stats(session_id: str) -> list[dict]:
     return result
 
 
-def read_metadata(session_id: str) -> dict:
+def get_pince_stats(session_id: str) -> list[dict]:
+    """Cached wrapper around _get_pince_stats_raw."""
+    return cache_manager.get_pince_stats(session_id, lambda: _get_pince_stats_raw(session_id))
+
+
+def _read_metadata_raw(session_id: str) -> dict:
     """Read metadata.json for a session. Returns dict or raises."""
     path = os.path.join(_session_path(session_id), "metadata.json")
     with open(path, encoding="utf-8") as f:
@@ -227,3 +242,8 @@ def read_metadata(session_id: str) -> dict:
     if not isinstance(data, dict):
         raise RuntimeError("metadata.json n'est pas un objet JSON")
     return data
+
+
+def read_metadata(session_id: str) -> dict:
+    """Cached wrapper around _read_metadata_raw."""
+    return cache_manager.get_session_metadata(session_id, lambda: _read_metadata_raw(session_id))

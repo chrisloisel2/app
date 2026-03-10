@@ -1,12 +1,13 @@
 from flask import Blueprint, jsonify
 import nas_client
+import cache_manager
 
 metadata_bp = Blueprint("metadata", __name__)
 
 
 @metadata_bp.route("/api/metadata/sessions", methods=["GET"])
 def list_sessions_metadata():
-    """Return metadata.json for each session directory on the NAS."""
+    """Return metadata.json for each session directory on the NAS. Cached."""
     try:
         session_ids = nas_client.list_sessions()
         rows = []
@@ -16,7 +17,9 @@ def list_sessions_metadata():
             metadata = None
             metadata_error = None
             try:
-                metadata = nas_client.read_metadata(sid)
+                metadata = cache_manager.get_session_metadata(
+                    sid, lambda s=sid: nas_client._read_metadata_raw(s)
+                )
                 dynamic_keys.update(metadata.keys())
             except Exception as e:
                 metadata_error = str(e)
