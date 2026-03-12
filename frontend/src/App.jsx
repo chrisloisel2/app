@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
-import TopBar from "./components/layout/TopBar";
 import DashboardPage from "./pages/DashboardPage";
 import KPIsPage from "./pages/KPIsPage";
 import SessionsPage from "./pages/SessionsPage";
@@ -18,11 +17,10 @@ import SshParcPage from "./pages/SshParcPage";
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <div className="flex h-screen bg-gray-950 overflow-hidden">
         <Sidebar />
         <div className="flex flex-col flex-1 overflow-hidden">
-          <TopBar />
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-y-auto h-full">
             <Routes>
               <Route path="/"                    element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"           element={<DashboardPage />} />

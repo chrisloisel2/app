@@ -1,0 +1,16 @@
+============================================================
+RAPPORT D'ÉCHEC — session_20260308_161838
+Généré le : 2026-03-12 14:14:09 UTC
+============================================================
+
+1 check(s) échoué(s) sur 65 :
+
+  [FAIL]  tracker_head_coverage
+          → tracker head: 0.0% couverture (min 50%)
+
+Avertissements :
+  [WARN]  head.jsonl : dernière ligne tronquée supprimée
+  [WARN]  left.jsonl : dernière ligne tronquée supprimée
+  [WARN]  right.jsonl : dernière ligne tronquée supprimée
+
+============================================================
