@@ -62,21 +62,12 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
   const deviceFaults = pc.device_faults ?? [];
   const faultsByKey = Object.fromEntries(deviceFaults.map(f => [`${f.device}/${f.device_id}`, f]));
 
-  // ── helpers inline ────────────────────────────────────────────────────────
-  const SectionLabel = ({ children }) => (
-    <span style={{ color: "rgba(99,102,241,0.55)", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 3 }}>
-      {children}
-    </span>
-  );
-
   return (
     <div
       onClick={handleClick}
       style={{
         border: `1.5px solid ${selected ? "#93c5fd" : borderColor}`,
-        boxShadow: selected
-          ? `0 0 0 2px #3b82f6, 0 0 14px ${glowColor}`
-          : `0 0 6px ${glowColor}`,
+        boxShadow: selected ? `0 0 0 2px #3b82f6, 0 0 14px ${glowColor}` : `0 0 6px ${glowColor}`,
         background: hasAlert
           ? (alertBlink ? "rgba(60,10,10,0.97)" : "rgba(15,23,42,0.9)")
           : isRecording ? "rgba(30,10,45,0.95)"
@@ -85,208 +76,143 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
         cursor: "pointer",
         transition: "border-color 0.15s, box-shadow 0.15s",
         borderRadius: 7,
-        // ── LANDSCAPE ──
         display: "flex",
         flexDirection: "row",
         width: 360,
-        height: 110,
+        height: 88,
         flexShrink: 0,
         overflow: "hidden",
       }}
     >
       {/* ════ COLONNE GAUCHE : identité ════ */}
       <div style={{
-        width: 120,
+        width: 86,
         flexShrink: 0,
-        borderRight: `1px solid ${hasAlert ? "rgba(239,68,68,0.2)" : "rgba(99,102,241,0.12)"}`,
-        padding: "7px 9px",
+        borderRight: `1px solid ${hasAlert ? "rgba(239,68,68,0.2)" : "rgba(99,102,241,0.10)"}`,
+        padding: "6px 8px",
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
         background: hasAlert
           ? (alertBlink ? "rgba(80,5,5,0.5)" : "rgba(20,5,5,0.3)")
-          : isRecording ? "rgba(50,0,70,0.4)" : "rgba(0,0,0,0.25)",
+          : isRecording ? "rgba(50,0,70,0.4)" : "rgba(0,0,0,0.2)",
       }}>
         {/* ID + dot */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ color: hasAlert ? "#f87171" : c.label, fontSize: 11, fontWeight: 800, letterSpacing: 0.5, fontFamily: "monospace" }}>
-            PC-{String(pcId).padStart(5, "0")}
+          <span style={{ color: hasAlert ? "#f87171" : c.label, fontSize: 10, fontWeight: 800, fontFamily: "monospace", letterSpacing: 0.3 }}>
+            {String(pcId).padStart(5, "0")}
           </span>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: borderColor, boxShadow: `0 0 5px ${glowColor}`, flexShrink: 0 }} />
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: borderColor, boxShadow: `0 0 4px ${glowColor}`, flexShrink: 0 }} />
         </div>
+
+        {/* Opérateur (1 ligne, compact) */}
+        <span style={{
+          color: operator ? (hasAlert ? "#fca5a5" : isRecording ? "#d8b4fe" : "#64748b") : "#1e293b",
+          fontSize: 8, fontWeight: 500,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {operator || (neverSeen ? "—" : "libre")}
+        </span>
 
         {/* Badges statut */}
-        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-          {isRecording && <span style={{ background: "#7c3aed", color: "#fff", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>REC</span>}
-          {hasAlert    && <span style={{ background: "#dc2626", color: "#fff", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>⚠</span>}
-          {upload?.status === "sending" && !isRecording && <span style={{ background: "#f59e0b", color: "#000", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>⬆</span>}
-          {upload?.status === "queued"  && !isRecording && <span style={{ background: "#6366f1", color: "#fff", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>Q</span>}
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          {isRecording && <span style={{ background: "#7c3aed", color: "#fff", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>REC</span>}
+          {hasAlert    && <span style={{ background: "#dc2626", color: "#fff", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>⚠</span>}
+          {upload?.status === "sending" && !isRecording && <span style={{ background: "#f59e0b", color: "#000", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>⬆</span>}
+          {upload?.status === "queued"  && !isRecording && <span style={{ background: "#6366f1", color: "#fff", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>Q</span>}
         </div>
-
-        {/* Opérateur */}
-        {!neverSeen && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <span style={{
-              color: operator ? (hasAlert ? "#fca5a5" : isRecording ? "#d8b4fe" : "#94a3b8") : "#2d3748",
-              fontSize: 9, fontWeight: operator ? 600 : 400,
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>
-              {operator ? `👤 ${operator}` : "—"}
-            </span>
-            {pc.scenario && (
-              <span style={{ color: "#334155", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {pc.scenario}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Heure MAJ */}
-        {!neverSeen && pc.last_ts && (
-          <span style={{ color: "#1e293b", fontSize: 7, fontFamily: "monospace" }}>
-            {new Date(pc.last_ts * 1000).toLocaleTimeString("fr-FR")}
-          </span>
-        )}
-
-        {neverSeen && (
-          <span style={{ color: "#1f2937", fontSize: 9, textAlign: "center" }}>non vu</span>
-        )}
       </div>
 
       {/* ════ COLONNE DROITE : périphériques ════ */}
       {!neverSeen && (
         <div style={{
           flex: 1,
-          padding: "7px 9px",
+          padding: "6px 8px",
           display: "flex",
           flexDirection: "column",
-          gap: 5,
+          justifyContent: "space-between",
+          gap: 4,
           overflow: "hidden",
         }}>
 
-          {/* ── Pannes actives ── */}
-          {deviceFaults.length > 0 && (
-            <div style={{
-              background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.3)",
-              borderRadius: 4, padding: "3px 6px",
-              display: "flex", flexWrap: "wrap", gap: "2px 10px", alignItems: "center",
-            }}>
-              <span style={{ color: "#ef4444", fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, flexShrink: 0 }}>⚠</span>
-              {deviceFaults.map((f, i) => (
-                <span key={i} title={f.detail} style={{ color: "#f87171", fontSize: 8, fontWeight: 600, whiteSpace: "nowrap" }}>
-                  {f.device === "camera" ? "📷" : f.device === "gripper" ? "🤏" : "◎"}{f.device_id} <span style={{ color: "#7f1d1d" }}>{f.fault}</span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* ── Ligne du milieu : Caméras + Pinces ── */}
-          <div style={{ display: "flex", gap: 10, flex: 1, alignItems: "flex-start" }}>
-
-            {/* Caméras */}
-            <div style={{ flex: 1 }}>
-              <SectionLabel>Caméras</SectionLabel>
-              {cameras.length === 0 ? (
-                <span style={{ color: "#1f2937", fontSize: 8 }}>aucune</span>
-              ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                  {cameras.map((cam, i) => {
-                    const pos = String(cam.position ?? i);
-                    const fault = faultsByKey[`camera/${pos}`];
-                    const ok = cam.db_match && !fault;
-                    return (
-                      <div key={i} title={fault?.detail ?? ""} style={{
-                        display: "flex", alignItems: "center", gap: 2,
-                        background: fault ? "rgba(239,68,68,0.12)" : ok ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
-                        border: `1px solid ${fault ? "rgba(239,68,68,0.4)" : ok ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.3)"}`,
-                        borderRadius: 3, padding: "2px 5px",
-                      }}>
-                        <span style={{ fontSize: 9 }}>📷</span>
-                        <span style={{ color: fault ? "#f87171" : ok ? "#22c55e" : "#f59e0b", fontSize: 9, fontWeight: 700 }}>{pos}</span>
-                        <span style={{ color: fault ? "#ef4444" : ok ? "#166534" : "#92400e", fontSize: 8 }}>{fault ? fault.fault.replace("_", " ") : ok ? "OK" : "?"}</span>
-                      </div>
-                    );
-                  })}
+          {/* ── Ligne 1 : Caméras ── */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
+            {cameras.length === 0 ? (
+              <span style={{ color: "#1e293b", fontSize: 8 }}>📷 —</span>
+            ) : cameras.map((cam, i) => {
+              const pos = String(cam.position ?? i);
+              const fault = faultsByKey[`camera/${pos}`];
+              const ok = cam.db_match && !fault;
+              return (
+                <div key={i} title={fault?.detail ?? pos} style={{
+                  display: "flex", alignItems: "center", gap: 2,
+                  background: fault ? "rgba(239,68,68,0.14)" : ok ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
+                  border: `1px solid ${fault ? "rgba(239,68,68,0.45)" : ok ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.3)"}`,
+                  borderRadius: 3, padding: "2px 5px",
+                }}>
+                  <span style={{ fontSize: 9 }}>📷</span>
+                  <span style={{ color: fault ? "#f87171" : ok ? "#22c55e" : "#f59e0b", fontSize: 9, fontWeight: 700 }}>{pos}</span>
                 </div>
-              )}
-            </div>
-
-            {/* Pinces */}
-            <div style={{ flex: 1 }}>
-              <SectionLabel>Pinces</SectionLabel>
-              {!hasGrippers ? (
-                <span style={{ color: "#1f2937", fontSize: 8 }}>aucune</span>
-              ) : (
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[
-                    { side: "G", g: gripLeft,  faultId: "left"  },
-                    { side: "D", g: gripRight, faultId: "right" },
-                  ].map(({ side, g, faultId }) => {
-                    const fault = faultsByKey[`gripper/${faultId}`];
-                    const conn  = g?.connected && !fault;
-                    return (
-                      <div key={side} title={fault?.detail ?? ""} style={{
-                        display: "flex", alignItems: "center", gap: 3,
-                        background: fault ? "rgba(239,68,68,0.12)" : conn ? "rgba(34,197,94,0.08)" : "rgba(107,114,128,0.06)",
-                        border: `1px solid ${fault ? "rgba(239,68,68,0.4)" : conn ? "rgba(34,197,94,0.3)" : "rgba(107,114,128,0.18)"}`,
-                        borderRadius: 3, padding: "2px 6px", flex: 1,
-                      }}>
-                        <span style={{ fontSize: 11 }}>🤏</span>
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <span style={{ color: fault ? "#f87171" : conn ? "#22c55e" : "#374151", fontSize: 9, fontWeight: 700 }}>{side}</span>
-                          <span style={{ color: fault ? "#ef4444" : conn ? "#166534" : "#374151", fontSize: 8 }}>
-                            {fault ? fault.fault.replace("_", " ") : conn ? (g.port ?? "OK") : "off"}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+              );
+            })}
           </div>
 
-          {/* ── Trackers + Upload ── */}
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            {/* Trackers */}
-            {(trackers.length > 0 || deviceFaults.some(f => f.device === "tracker")) && (
-              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                <SectionLabel>Trackers&nbsp;</SectionLabel>
-                {trackers.map(t => {
-                  const fault = faultsByKey[`tracker/T${t.idx}`] ?? faultsByKey[`tracker/${t.idx}`];
-                  const ok = t.tracking && !fault;
-                  return (
-                    <div key={t.idx} title={fault?.detail ?? ""} style={{
-                      display: "flex", alignItems: "center", gap: 2,
-                      background: fault ? "rgba(239,68,68,0.12)" : ok ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
-                      border: `1px solid ${fault ? "rgba(239,68,68,0.4)" : ok ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.35)"}`,
-                      borderRadius: 3, padding: "2px 5px",
-                    }}>
-                      <span style={{ color: fault ? "#f87171" : ok ? "#22c55e" : "#f59e0b", fontSize: 9, fontWeight: 700 }}>T{t.idx}</span>
-                      <span style={{ color: fault ? "#ef4444" : ok ? "#166534" : "#92400e", fontSize: 8 }}>{fault ? fault.fault.slice(0, 8) : ok ? "●" : "▲"}</span>
-                    </div>
-                  );
-                })}
-                {deviceFaults.filter(f => f.device === "tracker" && !trackers.find(t => `T${t.idx}` === f.device_id || String(t.idx) === f.device_id)).map((f, i) => (
-                  <div key={`df-${i}`} title={f.detail} style={{
-                    display: "flex", alignItems: "center", gap: 2,
-                    background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)",
-                    borderRadius: 3, padding: "2px 5px",
-                  }}>
-                    <span style={{ color: "#f87171", fontSize: 9, fontWeight: 700 }}>{f.device_id}</span>
-                    <span style={{ color: "#ef4444", fontSize: 8 }}>{f.fault.slice(0, 8)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* ── Ligne 2 : Pinces ── */}
+          <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
+            {[
+              { side: "G", g: gripLeft,  faultId: "left"  },
+              { side: "D", g: gripRight, faultId: "right" },
+            ].map(({ side, g, faultId }) => {
+              if (!g && !faultsByKey[`gripper/${faultId}`]) return null;
+              const fault = faultsByKey[`gripper/${faultId}`];
+              const conn  = g?.connected && !fault;
+              return (
+                <div key={side} title={fault?.detail ?? faultId} style={{
+                  display: "flex", alignItems: "center", gap: 3,
+                  background: fault ? "rgba(239,68,68,0.14)" : conn ? "rgba(34,197,94,0.08)" : "rgba(107,114,128,0.06)",
+                  border: `1px solid ${fault ? "rgba(239,68,68,0.45)" : conn ? "rgba(34,197,94,0.3)" : "rgba(107,114,128,0.18)"}`,
+                  borderRadius: 3, padding: "2px 7px",
+                }}>
+                  <span style={{ fontSize: 10 }}>🤏</span>
+                  <span style={{ color: fault ? "#f87171" : conn ? "#22c55e" : "#374151", fontSize: 9, fontWeight: 700 }}>{side}</span>
+                </div>
+              );
+            })}
+          </div>
 
+          {/* ── Ligne 3 : Trackers + upload bar ── */}
+          <div style={{ display: "flex", gap: 3, alignItems: "center", flex: 1 }}>
+            {trackers.map(t => {
+              const fault = faultsByKey[`tracker/T${t.idx}`] ?? faultsByKey[`tracker/${t.idx}`];
+              const ok = t.tracking && !fault;
+              return (
+                <div key={t.idx} title={fault?.detail ?? `T${t.idx}`} style={{
+                  display: "flex", alignItems: "center", gap: 2,
+                  background: fault ? "rgba(239,68,68,0.14)" : ok ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
+                  border: `1px solid ${fault ? "rgba(239,68,68,0.45)" : ok ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.35)"}`,
+                  borderRadius: 3, padding: "2px 5px",
+                }}>
+                  <span style={{ color: fault ? "#f87171" : ok ? "#22c55e" : "#f59e0b", fontSize: 9, fontWeight: 700 }}>T{t.idx}</span>
+                </div>
+              );
+            })}
+            {/* Trackers fault-only (déconnectés) */}
+            {deviceFaults.filter(f => f.device === "tracker" && !trackers.find(t => `T${t.idx}` === f.device_id || String(t.idx) === f.device_id)).map((f, i) => (
+              <div key={`df-${i}`} title={f.detail} style={{
+                display: "flex", alignItems: "center", gap: 2,
+                background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.45)",
+                borderRadius: 3, padding: "2px 5px",
+              }}>
+                <span style={{ color: "#f87171", fontSize: 9, fontWeight: 700 }}>{f.device_id}</span>
+              </div>
+            ))}
             {/* Upload progress */}
             {upload?.status === "sending" && upload.progress_pct != null && (
-              <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, marginLeft: 4 }}>
                 <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", borderRadius: 2, height: 4 }}>
                   <div style={{ width: `${Math.min(100, upload.progress_pct)}%`, height: "100%", background: "#f59e0b", borderRadius: 2, transition: "width 0.4s" }} />
                 </div>
-                <span style={{ color: "#f59e0b", fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{upload.progress_pct}%</span>
+                <span style={{ color: "#f59e0b", fontSize: 8, fontWeight: 700, flexShrink: 0 }}>{upload.progress_pct}%</span>
               </div>
             )}
           </div>
