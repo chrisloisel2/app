@@ -70,9 +70,7 @@ def register_ws_route(sock):
             pass
         try:
             while True:
-                msg = ws.receive(timeout=30)
-                if msg is None:
-                    break
+                ws.receive(timeout=30)
         except Exception:
             pass
         finally:
