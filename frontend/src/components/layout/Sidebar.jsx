@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const KPI_SECTIONS = [
   { key: "overview",        label: "Strategic" },
@@ -19,6 +19,21 @@ export default function Sidebar() {
   const location = useLocation();
   const kpisOpen = location.pathname.startsWith("/kpis");
   const [expanded, setExpanded] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
 
   const w = expanded ? "w-56" : "w-14";
 
@@ -141,8 +156,15 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      <div className={`py-3 border-t border-gray-800 shrink-0 ${expanded ? "px-4" : "flex justify-center"}`}>
-        {expanded ? <p className="text-xs text-gray-600">NAS · NFS · CSV</p> : <span className="text-xs text-gray-700">·</span>}
+      <div className={`py-3 border-t border-gray-800 shrink-0 flex items-center gap-2 ${expanded ? "px-4 justify-between" : "flex-col justify-center"}`}>
+        {expanded && <p className="text-xs text-gray-600">NAS · NFS · CSV</p>}
+        <button
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+          className="text-gray-500 hover:text-white transition-colors p-1 rounded"
+        >
+          {isFullscreen ? "⊡" : "⛶"}
+        </button>
       </div>
     </aside>
   );
