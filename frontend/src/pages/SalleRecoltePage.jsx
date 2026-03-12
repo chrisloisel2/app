@@ -58,6 +58,16 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
   const trackers = pc.trackers ? Object.values(pc.trackers) : [];
   // upload
   const upload = pc.upload;
+  // device faults actifs
+  const deviceFaults = pc.device_faults ?? [];
+  const faultsByKey = Object.fromEntries(deviceFaults.map(f => [`${f.device}/${f.device_id}`, f]));
+
+  // ── helpers inline ────────────────────────────────────────────────────────
+  const SectionLabel = ({ children }) => (
+    <span style={{ color: "rgba(99,102,241,0.55)", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 3 }}>
+      {children}
+    </span>
+  );
 
   return (
     <div
@@ -65,7 +75,7 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
       style={{
         border: `1.5px solid ${selected ? "#93c5fd" : borderColor}`,
         boxShadow: selected
-          ? `0 0 0 2px #3b82f6, 0 0 12px ${glowColor}`
+          ? `0 0 0 2px #3b82f6, 0 0 14px ${glowColor}`
           : `0 0 6px ${glowColor}`,
         background: hasAlert
           ? (alertBlink ? "rgba(60,10,10,0.97)" : "rgba(15,23,42,0.9)")
@@ -74,184 +84,212 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
           : "rgba(15,23,42,0.92)",
         cursor: "pointer",
         transition: "border-color 0.15s, box-shadow 0.15s",
-        position: "relative",
-        borderRadius: 6,
-        padding: "8px 10px",
+        borderRadius: 7,
+        // ── LANDSCAPE ──
         display: "flex",
-        flexDirection: "column",
-        gap: 5,
-        width: 160,
-        minHeight: 140,
+        flexDirection: "row",
+        width: 360,
+        height: 110,
         flexShrink: 0,
+        overflow: "hidden",
       }}
     >
-      {/* ── Header : ID + statut ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ color: hasAlert ? "#f87171" : c.label, fontSize: 10, fontWeight: 800, letterSpacing: 0.5 }}>
-          PC-{String(pcId).padStart(5, "0")}
-        </span>
-        <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
-          {isRecording && (
-            <span style={{ background: "#7c3aed", color: "#fff", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>REC</span>
-          )}
-          {hasAlert && (
-            <span style={{ background: "#dc2626", color: "#fff", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>⚠</span>
-          )}
-          {upload?.status === "sending" && !isRecording && (
-            <span style={{ background: "#f59e0b", color: "#000", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>⬆</span>
-          )}
-          {upload?.status === "queued" && !isRecording && (
-            <span style={{ background: "#6366f1", color: "#fff", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>Q</span>
-          )}
-          {/* pulse dot */}
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: borderColor, boxShadow: `0 0 4px ${glowColor}`, flexShrink: 0 }} />
-        </div>
-      </div>
-
-      {/* ── Opérateur + scénario ── */}
-      {!neverSeen && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <span style={{
-            color: operator ? (hasAlert ? "#fca5a5" : isRecording ? "#d8b4fe" : "#cbd5e1") : "#374151",
-            fontSize: 9, fontWeight: operator ? 600 : 400,
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {operator ? `👤 ${operator}` : "— sans opérateur"}
+      {/* ════ COLONNE GAUCHE : identité ════ */}
+      <div style={{
+        width: 120,
+        flexShrink: 0,
+        borderRight: `1px solid ${hasAlert ? "rgba(239,68,68,0.2)" : "rgba(99,102,241,0.12)"}`,
+        padding: "7px 9px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        background: hasAlert
+          ? (alertBlink ? "rgba(80,5,5,0.5)" : "rgba(20,5,5,0.3)")
+          : isRecording ? "rgba(50,0,70,0.4)" : "rgba(0,0,0,0.25)",
+      }}>
+        {/* ID + dot */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ color: hasAlert ? "#f87171" : c.label, fontSize: 11, fontWeight: 800, letterSpacing: 0.5, fontFamily: "monospace" }}>
+            PC-{String(pcId).padStart(5, "0")}
           </span>
-          {pc.scenario && (
-            <span style={{ color: "#475569", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              ◈ {pc.scenario}
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: borderColor, boxShadow: `0 0 5px ${glowColor}`, flexShrink: 0 }} />
+        </div>
+
+        {/* Badges statut */}
+        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+          {isRecording && <span style={{ background: "#7c3aed", color: "#fff", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>REC</span>}
+          {hasAlert    && <span style={{ background: "#dc2626", color: "#fff", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>⚠</span>}
+          {upload?.status === "sending" && !isRecording && <span style={{ background: "#f59e0b", color: "#000", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>⬆</span>}
+          {upload?.status === "queued"  && !isRecording && <span style={{ background: "#6366f1", color: "#fff", fontSize: 8, fontWeight: 700, borderRadius: 2, padding: "1px 4px" }}>Q</span>}
+        </div>
+
+        {/* Opérateur */}
+        {!neverSeen && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{
+              color: operator ? (hasAlert ? "#fca5a5" : isRecording ? "#d8b4fe" : "#94a3b8") : "#2d3748",
+              fontSize: 9, fontWeight: operator ? 600 : 400,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {operator ? `👤 ${operator}` : "—"}
             </span>
-          )}
-        </div>
-      )}
-
-      {/* ── Caméras ── */}
-      {!neverSeen && (
-        <div>
-          <span style={{ color: "rgba(99,102,241,0.5)", fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-            Caméras
-          </span>
-          {cameras.length === 0 ? (
-            <div style={{ color: "#1f2937", fontSize: 8, marginTop: 2 }}>aucune</div>
-          ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>
-              {cameras.map((cam, i) => {
-                const ok = cam.db_match;
-                return (
-                  <div key={i} style={{
-                    display: "flex", alignItems: "center", gap: 3,
-                    background: ok ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
-                    border: `1px solid ${ok ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.25)"}`,
-                    borderRadius: 3, padding: "2px 5px",
-                  }}>
-                    <span style={{ fontSize: 8 }}>📷</span>
-                    <span style={{ color: ok ? "#22c55e" : "#f59e0b", fontSize: 8, fontWeight: 600 }}>
-                      {cam.position ?? i}
-                    </span>
-                    <span style={{ color: ok ? "#166534" : "#92400e", fontSize: 7 }}>
-                      {ok ? "OK" : "?"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Pinces / Grippers ── */}
-      {!neverSeen && (
-        <div>
-          <span style={{ color: "rgba(99,102,241,0.5)", fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-            Pinces
-          </span>
-          {!hasGrippers ? (
-            <div style={{ color: "#1f2937", fontSize: 8, marginTop: 2 }}>aucune</div>
-          ) : (
-            <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
-              {[
-                { side: "G", g: gripLeft },
-                { side: "D", g: gripRight },
-              ].map(({ side, g }) => {
-                const conn = g?.connected;
-                return (
-                  <div key={side} style={{
-                    display: "flex", alignItems: "center", gap: 3,
-                    background: conn ? "rgba(34,197,94,0.08)" : "rgba(107,114,128,0.06)",
-                    border: `1px solid ${conn ? "rgba(34,197,94,0.25)" : "rgba(107,114,128,0.15)"}`,
-                    borderRadius: 3, padding: "2px 5px", flex: 1,
-                  }}>
-                    <span style={{ color: conn ? "#22c55e" : "#374151", fontSize: 10 }}>🤏</span>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ color: conn ? "#22c55e" : "#374151", fontSize: 8, fontWeight: 700 }}>{side}</span>
-                      <span style={{ color: conn ? "#166534" : "#374151", fontSize: 7 }}>
-                        {conn ? (g.port ?? "OK") : "off"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Trackers ── */}
-      {!neverSeen && trackers.length > 0 && (
-        <div>
-          <span style={{ color: "rgba(99,102,241,0.5)", fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-            Trackers
-          </span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>
-            {trackers.map(t => (
-              <div key={t.idx} style={{
-                display: "flex", alignItems: "center", gap: 2,
-                background: t.tracking ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
-                border: `1px solid ${t.tracking ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.3)"}`,
-                borderRadius: 3, padding: "2px 5px",
-              }}>
-                <span style={{ color: t.tracking ? "#22c55e" : "#f59e0b", fontSize: 8, fontWeight: 700 }}>
-                  T{t.idx}
-                </span>
-                <span style={{ color: t.tracking ? "#166534" : "#92400e", fontSize: 7 }}>
-                  {t.tracking ? "●" : "▲"}
-                </span>
-              </div>
-            ))}
+            {pc.scenario && (
+              <span style={{ color: "#334155", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {pc.scenario}
+              </span>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Upload progress ── */}
-      {!neverSeen && upload && upload.status === "sending" && upload.progress_pct != null && (
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", borderRadius: 2, height: 3 }}>
-            <div style={{
-              width: `${Math.min(100, upload.progress_pct)}%`,
-              height: "100%", background: "#f59e0b", borderRadius: 2,
-              transition: "width 0.4s",
-            }} />
-          </div>
-          <span style={{ color: "#f59e0b", fontSize: 8, fontWeight: 700, flexShrink: 0 }}>
-            {upload.progress_pct}%
-          </span>
-        </div>
-      )}
-
-      {/* ── État si jamais vu ── */}
-      {neverSeen && (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ color: "#1f2937", fontSize: 9 }}>non vu</span>
-        </div>
-      )}
-
-      {/* ── Heure dernière MAJ ── */}
-      {!neverSeen && pc.last_ts && (
-        <div style={{ marginTop: "auto" }}>
-          <span style={{ color: "#1f2937", fontSize: 7 }}>
+        {/* Heure MAJ */}
+        {!neverSeen && pc.last_ts && (
+          <span style={{ color: "#1e293b", fontSize: 7, fontFamily: "monospace" }}>
             {new Date(pc.last_ts * 1000).toLocaleTimeString("fr-FR")}
           </span>
+        )}
+
+        {neverSeen && (
+          <span style={{ color: "#1f2937", fontSize: 9, textAlign: "center" }}>non vu</span>
+        )}
+      </div>
+
+      {/* ════ COLONNE DROITE : périphériques ════ */}
+      {!neverSeen && (
+        <div style={{
+          flex: 1,
+          padding: "7px 9px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 5,
+          overflow: "hidden",
+        }}>
+
+          {/* ── Pannes actives ── */}
+          {deviceFaults.length > 0 && (
+            <div style={{
+              background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.3)",
+              borderRadius: 4, padding: "3px 6px",
+              display: "flex", flexWrap: "wrap", gap: "2px 10px", alignItems: "center",
+            }}>
+              <span style={{ color: "#ef4444", fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, flexShrink: 0 }}>⚠</span>
+              {deviceFaults.map((f, i) => (
+                <span key={i} title={f.detail} style={{ color: "#f87171", fontSize: 8, fontWeight: 600, whiteSpace: "nowrap" }}>
+                  {f.device === "camera" ? "📷" : f.device === "gripper" ? "🤏" : "◎"}{f.device_id} <span style={{ color: "#7f1d1d" }}>{f.fault}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* ── Ligne du milieu : Caméras + Pinces ── */}
+          <div style={{ display: "flex", gap: 10, flex: 1, alignItems: "flex-start" }}>
+
+            {/* Caméras */}
+            <div style={{ flex: 1 }}>
+              <SectionLabel>Caméras</SectionLabel>
+              {cameras.length === 0 ? (
+                <span style={{ color: "#1f2937", fontSize: 8 }}>aucune</span>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                  {cameras.map((cam, i) => {
+                    const pos = String(cam.position ?? i);
+                    const fault = faultsByKey[`camera/${pos}`];
+                    const ok = cam.db_match && !fault;
+                    return (
+                      <div key={i} title={fault?.detail ?? ""} style={{
+                        display: "flex", alignItems: "center", gap: 2,
+                        background: fault ? "rgba(239,68,68,0.12)" : ok ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
+                        border: `1px solid ${fault ? "rgba(239,68,68,0.4)" : ok ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.3)"}`,
+                        borderRadius: 3, padding: "2px 5px",
+                      }}>
+                        <span style={{ fontSize: 9 }}>📷</span>
+                        <span style={{ color: fault ? "#f87171" : ok ? "#22c55e" : "#f59e0b", fontSize: 9, fontWeight: 700 }}>{pos}</span>
+                        <span style={{ color: fault ? "#ef4444" : ok ? "#166534" : "#92400e", fontSize: 8 }}>{fault ? fault.fault.replace("_", " ") : ok ? "OK" : "?"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Pinces */}
+            <div style={{ flex: 1 }}>
+              <SectionLabel>Pinces</SectionLabel>
+              {!hasGrippers ? (
+                <span style={{ color: "#1f2937", fontSize: 8 }}>aucune</span>
+              ) : (
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[
+                    { side: "G", g: gripLeft,  faultId: "left"  },
+                    { side: "D", g: gripRight, faultId: "right" },
+                  ].map(({ side, g, faultId }) => {
+                    const fault = faultsByKey[`gripper/${faultId}`];
+                    const conn  = g?.connected && !fault;
+                    return (
+                      <div key={side} title={fault?.detail ?? ""} style={{
+                        display: "flex", alignItems: "center", gap: 3,
+                        background: fault ? "rgba(239,68,68,0.12)" : conn ? "rgba(34,197,94,0.08)" : "rgba(107,114,128,0.06)",
+                        border: `1px solid ${fault ? "rgba(239,68,68,0.4)" : conn ? "rgba(34,197,94,0.3)" : "rgba(107,114,128,0.18)"}`,
+                        borderRadius: 3, padding: "2px 6px", flex: 1,
+                      }}>
+                        <span style={{ fontSize: 11 }}>🤏</span>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <span style={{ color: fault ? "#f87171" : conn ? "#22c55e" : "#374151", fontSize: 9, fontWeight: 700 }}>{side}</span>
+                          <span style={{ color: fault ? "#ef4444" : conn ? "#166534" : "#374151", fontSize: 8 }}>
+                            {fault ? fault.fault.replace("_", " ") : conn ? (g.port ?? "OK") : "off"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Trackers + Upload ── */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {/* Trackers */}
+            {(trackers.length > 0 || deviceFaults.some(f => f.device === "tracker")) && (
+              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                <SectionLabel>Trackers&nbsp;</SectionLabel>
+                {trackers.map(t => {
+                  const fault = faultsByKey[`tracker/T${t.idx}`] ?? faultsByKey[`tracker/${t.idx}`];
+                  const ok = t.tracking && !fault;
+                  return (
+                    <div key={t.idx} title={fault?.detail ?? ""} style={{
+                      display: "flex", alignItems: "center", gap: 2,
+                      background: fault ? "rgba(239,68,68,0.12)" : ok ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
+                      border: `1px solid ${fault ? "rgba(239,68,68,0.4)" : ok ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.35)"}`,
+                      borderRadius: 3, padding: "2px 5px",
+                    }}>
+                      <span style={{ color: fault ? "#f87171" : ok ? "#22c55e" : "#f59e0b", fontSize: 9, fontWeight: 700 }}>T{t.idx}</span>
+                      <span style={{ color: fault ? "#ef4444" : ok ? "#166534" : "#92400e", fontSize: 8 }}>{fault ? fault.fault.slice(0, 8) : ok ? "●" : "▲"}</span>
+                    </div>
+                  );
+                })}
+                {deviceFaults.filter(f => f.device === "tracker" && !trackers.find(t => `T${t.idx}` === f.device_id || String(t.idx) === f.device_id)).map((f, i) => (
+                  <div key={`df-${i}`} title={f.detail} style={{
+                    display: "flex", alignItems: "center", gap: 2,
+                    background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)",
+                    borderRadius: 3, padding: "2px 5px",
+                  }}>
+                    <span style={{ color: "#f87171", fontSize: 9, fontWeight: 700 }}>{f.device_id}</span>
+                    <span style={{ color: "#ef4444", fontSize: 8 }}>{f.fault.slice(0, 8)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload progress */}
+            {upload?.status === "sending" && upload.progress_pct != null && (
+              <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1 }}>
+                <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", borderRadius: 2, height: 4 }}>
+                  <div style={{ width: `${Math.min(100, upload.progress_pct)}%`, height: "100%", background: "#f59e0b", borderRadius: 2, transition: "width 0.4s" }} />
+                </div>
+                <span style={{ color: "#f59e0b", fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{upload.progress_pct}%</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -895,23 +933,26 @@ export default function SalleRecoltePage() {
               {rows.map((row, rowIdx) => {
                 const isReversed = rowIdx === 2 || rowIdx === 4;
                 return (
-                  <div key={rowIdx} style={{ marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
-                      <span style={{
-                        color: "rgba(99,102,241,0.4)", fontSize: 8, width: 32, flexShrink: 0,
+                  <div key={rowIdx} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
+                      {/* Label rangée vertical */}
+                      <div style={{
+                        color: "rgba(99,102,241,0.35)", fontSize: 8, width: 22, flexShrink: 0,
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        writingMode: "vertical-rl", textOrientation: "mixed", letterSpacing: 2,
+                        writingMode: "vertical-rl", letterSpacing: 2,
                       }}>
                         {isReversed ? "←" : "→"} R{rowIdx + 1}
-                      </span>
+                      </div>
+                      {/* Grille 2 colonnes de cartes landscape */}
                       <div style={{
                         flex: 1,
-                        background: "rgba(99,102,241,0.03)",
-                        border: "1px solid rgba(99,102,241,0.10)",
+                        background: "rgba(99,102,241,0.025)",
+                        border: "1px solid rgba(99,102,241,0.08)",
                         borderRadius: 8,
-                        padding: "12px 14px",
-                        display: "flex", gap: 10,
-                        flexWrap: "wrap",
+                        padding: "8px 10px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
+                        gap: 8,
                       }}>
                         {row.map((pc) => (
                           <PcBox

@@ -298,6 +298,60 @@ def _handle_event(msg: dict) -> bool:
             "error":      msg.get("error", ""),
         }
 
+    elif event_type == "device_fault":
+        device    = msg.get("device", "")
+        device_id = str(msg.get("device_id", ""))
+        fault     = msg.get("fault", "")
+        detail    = msg.get("detail", "")
+
+        # Initialise le dict de pannes actives si nécessaire
+        if "device_faults" not in st:
+            st["device_faults"] = {}  # key: "device/device_id" -> fault dict
+
+        fault_key = f"{device}/{device_id}"
+
+        if fault == "recovered":
+            # Supprime la panne
+            st["device_faults"].pop(fault_key, None)
+
+            # Réconcilie l'état du périphérique
+            if device == "gripper" and device_id in ("left", "right"):
+                st["grippers"][device_id]["connected"] = True
+            elif device == "tracker":
+                idx = str(device_id).lstrip("T")
+                if idx in st["trackers"]:
+                    st["trackers"][idx]["tracking"] = True
+            elif device == "camera":
+                for cam in st["cameras"]:
+                    if str(cam.get("position", "")) == device_id:
+                        cam["fault"] = None
+        else:
+            # Enregistre / met à jour la panne
+            st["device_faults"][fault_key] = {
+                "device":    device,
+                "device_id": device_id,
+                "fault":     fault,
+                "detail":    detail,
+                "ts":        ts,
+            }
+
+            # Réconcilie l'état du périphérique
+            if device == "gripper" and device_id in ("left", "right"):
+                st["grippers"][device_id]["connected"] = False
+            elif device == "tracker":
+                idx = str(device_id).lstrip("T")
+                if fault == "disconnected":
+                    st["trackers"].pop(idx, None)
+                elif fault == "tracking_lost" and idx in st["trackers"]:
+                    st["trackers"][idx]["tracking"] = False
+            elif device == "camera":
+                for cam in st["cameras"]:
+                    if str(cam.get("position", "")) == device_id:
+                        cam["fault"] = fault
+
+        # Active l'alerte station si panne non résolue
+        st["alert"] = len(st.get("device_faults", {})) > 0
+
     elif event_type == "session_integrity_error":
         alert = {
             "ts":                    ts,
@@ -646,6 +700,7 @@ def get_stations_snapshot() -> dict:
                 "connected":        connected,
                 "last_ts":          st["last_ts"],
                 "integrity_alerts": list(_integrity_alerts.get(st["station_id"], [])),
+                "device_faults":    list(st.get("device_faults", {}).values()),
             })
 
         total = len(stations)
