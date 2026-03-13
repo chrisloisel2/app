@@ -158,7 +158,8 @@ def _default_station(station_id: str) -> dict:
             "last_start_ts":    0.0,
             "last_activity_ts": 0.0,
         },
-        "upload": None,   # None ou {status, session_id, ...}
+        "upload": None,          # None ou {status, session_id, ...}
+        "device_faults": {},     # fault_key -> fault dict
         "connected": True,
         "last_ts":   0.0,
     }
@@ -305,14 +306,12 @@ def _handle_event(msg: dict) -> bool:
         detail    = msg.get("detail", "")
 
         # Initialise le dict de pannes actives si nécessaire
-        if "device_faults" not in st:
-            st["device_faults"] = {}  # key: "device/device_id" -> fault dict
-
+        faults = st.setdefault("device_faults", {})
         fault_key = f"{device}/{device_id}"
 
         if fault == "recovered":
             # Supprime la panne
-            st["device_faults"].pop(fault_key, None)
+            faults.pop(fault_key, None)
 
             # Réconcilie l'état du périphérique
             if device == "gripper" and device_id in ("left", "right"):
@@ -327,7 +326,7 @@ def _handle_event(msg: dict) -> bool:
                         cam["fault"] = None
         else:
             # Enregistre / met à jour la panne
-            st["device_faults"][fault_key] = {
+            faults[fault_key] = {
                 "device":    device,
                 "device_id": device_id,
                 "fault":     fault,
@@ -349,8 +348,8 @@ def _handle_event(msg: dict) -> bool:
                     if str(cam.get("position", "")) == device_id:
                         cam["fault"] = fault
 
-        # Active l'alerte station si panne non résolue
-        st["alert"] = len(st.get("device_faults", {})) > 0
+        # Alerte station active ssi des pannes device_fault restent non résolues
+        st["alert"] = len(faults) > 0
 
     elif event_type == "session_integrity_error":
         alert = {
