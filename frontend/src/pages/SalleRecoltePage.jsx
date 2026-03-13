@@ -478,7 +478,7 @@ function SpoolSection({ spool }) {
           <>
             <span style={{ color: "#1e3a5f", fontSize: 9 }}>|</span>
             <span style={{ color: "#334155", fontSize: 9 }}>
-              {config.workers}w · retry×{config.max_retries} · NAS {config.nas_host}:{config.nas_port}
+              {config.workers}w · retry×{config.max_retries} · scan {config.scan_interval_s}s · NAS {config.nas_host}:{config.nas_port}
             </span>
           </>
         )}
@@ -496,6 +496,7 @@ function SpoolSection({ spool }) {
               {[
                 { label: "Traités aujourd'hui", value: stats.processed_today,  color: "#22c55e" },
                 { label: "Transférés NAS",       value: stats.forwarded_to_nas, color: "#22d3ee" },
+                { label: "Échecs session",        value: stats.failed_session,   color: stats.failed_session > 0 ? "#f97316" : "#475569" },
                 { label: "Jobs total",            value: stats.total_jobs,       color: "#94a3b8" },
                 { label: "Terminés",              value: stats.done,             color: "#22c55e" },
                 { label: "En cours",              value: stats.processing,       color: "#f59e0b" },
@@ -599,6 +600,11 @@ function SpoolSection({ spool }) {
                       </span>
                       <span style={{ color: "#475569" }}>×{f.attempts}</span>
                     </div>
+                    {f.file && (
+                      <div style={{ color: "#6b7280", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 1 }}>
+                        {f.file}
+                      </div>
+                    )}
                     <div style={{ color: "#7f1d1d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {f.error}
                     </div>
@@ -623,6 +629,11 @@ function SpoolSection({ spool }) {
                 <span style={{ color: "#334155", fontFamily: "monospace" }}>
                   PC-{String(d.sender).padStart(2, "0")}
                 </span>
+                {d.file && (
+                  <span style={{ color: "#1e3a5f", fontFamily: "monospace", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {d.file}
+                  </span>
+                )}
                 <span style={{ color: "#1e293b" }}>{d.size_mb?.toFixed(0)} MB</span>
                 <span style={{ color: "#0f172a" }}>{fmtTime(d.completed_at)}</span>
               </div>
