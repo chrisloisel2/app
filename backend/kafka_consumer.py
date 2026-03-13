@@ -181,12 +181,28 @@ def _handle_event(msg: dict) -> bool:
     operator = str(msg.get("operator", ""))
     scenario = str(msg.get("scenario", ""))
 
+    # Events qui prouvent qu'une station est vivante → connexion implicite
+    ACTIVITY_EVENTS = {
+        "recording_started", "recording_stopped", "session_failed",
+        "cameras_detected",
+        "gripper_connected", "gripper_disconnected",
+        "gripper_switch_on", "gripper_switch_off",
+        "tracker_connected", "tracker_disconnected",
+        "tracker_lost", "tracker_recovered",
+        "tracker_low_battery", "tracker_critical_battery",
+        "upload_queued", "upload_started", "upload_completed", "upload_failed",
+        "device_fault",
+    }
+
     st = _stations.get(station_id) or _default_station(station_id)
     st["last_ts"] = ts
     if operator:
         st["operator"] = operator
     if scenario:
         st["scenario"] = scenario
+
+    if event_type in ACTIVITY_EVENTS and not st["connected"]:
+        st["connected"] = True
 
     if event_type == "operator_connected":
         st["connected"] = True
@@ -202,10 +218,19 @@ def _handle_event(msg: dict) -> bool:
 
     elif event_type == "cameras_detected":
         st["cameras"] = msg.get("cameras", [])
+        # Nettoie les faults camera pour les caméras qui n'ont plus de fault
+        faults = st.setdefault("device_faults", {})
+        for cam in st["cameras"]:
+            if not cam.get("fault"):
+                faults.pop(f"camera/{cam.get('position', '')}", None)
+        st["alert"] = len(faults) > 0
 
     elif event_type == "gripper_connected":
         side = msg.get("side", "right")
         st["grippers"][side] = {"connected": True, "port": msg.get("port")}
+        faults = st.setdefault("device_faults", {})
+        faults.pop(f"gripper/{side}", None)
+        st["alert"] = len(faults) > 0
 
     elif event_type == "gripper_disconnected":
         side = msg.get("side", "right")
@@ -226,6 +251,9 @@ def _handle_event(msg: dict) -> bool:
             "tracking": True,
             "battery": st["trackers"].get(idx, {}).get("battery", 1.0),
         }
+        faults = st.setdefault("device_faults", {})
+        faults.pop(f"tracker/{idx}", None)
+        st["alert"] = len(faults) > 0
 
     elif event_type == "tracker_disconnected":
         idx = str(msg.get("idx", ""))
@@ -240,6 +268,9 @@ def _handle_event(msg: dict) -> bool:
         idx = str(msg.get("idx", ""))
         if idx in st["trackers"]:
             st["trackers"][idx]["tracking"] = True
+        faults = st.setdefault("device_faults", {})
+        faults.pop(f"tracker/{idx}", None)
+        st["alert"] = len(faults) > 0
 
     elif event_type in ("tracker_low_battery", "tracker_critical_battery"):
         idx     = str(msg.get("idx", ""))
