@@ -74,6 +74,8 @@ _spool = {
     "failed_total":     0,
     # Nouveau format spool_status — remplacé à chaque message
     "snapshot":      None,
+    # spool_daemon lifecycle — dernier event reçu de run.sh
+    "daemon":        None,  # {"status": "started"|"stopped"|"start_failed", "pid": int|None, "ts": float, "ts_iso": str, "workers": int|None, "nas_host": str|None, "log": str|None}
 }
 
 # session_integrity_error alerts — keyed by station_id
@@ -379,6 +381,26 @@ def _handle_event(msg: dict) -> bool:
 
 # ── inspect_session handler ───────────────────────────────────────────────────
 
+def _handle_spool_daemon(msg: dict) -> bool:
+    """Process a message from run.sh (source == 'spool_daemon').
+    Returns True if state changed (triggers WS push).
+    """
+    step   = msg.get("step", "")
+    status = msg.get("status", "")
+    if step != "daemon":
+        return False
+    _spool["daemon"] = {
+        "status":   status,
+        "pid":      msg.get("pid"),
+        "ts":       float(msg.get("ts", time.time())),
+        "ts_iso":   msg.get("ts_iso"),
+        "workers":  msg.get("workers"),
+        "nas_host": msg.get("nas_host"),
+        "log":      msg.get("log"),
+    }
+    return True
+
+
 def _handle_inspect_session(msg: dict) -> bool:
     """Process a message from inspect_session (source == 'inspect_session').
     Returns True if state changed (triggers WS push).
@@ -554,6 +576,9 @@ def _process_message(raw_value: bytes):
         elif "source" in msg and msg["source"] == "inspect_session":
             # inspect_session spool — pipeline d'inspection/upload (ancien format)
             should_notify = _handle_inspect_session(msg)
+        elif "source" in msg and msg["source"] == "spool_daemon":
+            # run.sh — lifecycle du daemon spool
+            should_notify = _handle_spool_daemon(msg)
         elif "type" in msg:
             # KafkaEventPublisher — événement cycle de vie
             should_notify = _handle_event(msg)
@@ -707,7 +732,10 @@ def get_stations_snapshot() -> dict:
         recording_count = sum(1 for s in stations if s["connected"] and s["recording"]["is_recording"])
 
         if _spool["snapshot"] is not None:
-            spool = _spool["snapshot"]
+            spool = dict(_spool["snapshot"])
+            spool["daemon"]  = _spool["daemon"]
+            spool["active"]  = list(_spool["active"].values())
+            spool["history"] = list(_spool["history"])
         else:
             spool = {
                 "consumer_ok":     _spool["consumer_ok"],
@@ -716,6 +744,7 @@ def get_stations_snapshot() -> dict:
                 "failed_total":    _spool["failed_total"],
                 "active":          list(_spool["active"].values()),
                 "history":         list(_spool["history"]),
+                "daemon":          _spool["daemon"],
             }
 
         return {

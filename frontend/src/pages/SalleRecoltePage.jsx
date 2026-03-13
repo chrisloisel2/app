@@ -433,8 +433,10 @@ function SpoolSection({ spool }) {
   }
 
   // ── Nouveau format spool_status ──────────────────────────────────────────────
-  const { queue, current_transfer, stats, disk, recent_failed, recent_done, config, uptime_s } = spool;
+  const { queue, current_transfer, stats, disk, recent_failed, recent_done, config, uptime_s, daemon, active, history } = spool;
   const ct = current_transfer;
+  const activeSessions = Array.isArray(active) ? active : [];
+  const doneSessions   = Array.isArray(history) ? history : [];
 
   function fmtUptime(s) {
     if (!s) return "—";
@@ -480,6 +482,18 @@ function SpoolSection({ spool }) {
             <span style={{ color: "#334155", fontSize: 9 }}>
               {config.workers}w · retry×{config.max_retries} · scan {config.scan_interval_s}s · NAS {config.nas_host}:{config.nas_port}
             </span>
+          </>
+        )}
+        {daemon && (
+          <>
+            <span style={{ color: "#1e3a5f", fontSize: 9 }}>|</span>
+            <span style={{
+              fontSize: 9, fontWeight: 700,
+              color: daemon.status === "started" ? "#22c55e" : daemon.status === "stopped" ? "#9ca3af" : "#ef4444",
+            }}>
+              daemon:{daemon.status}
+            </span>
+            {daemon.pid && <span style={{ color: "#334155", fontSize: 9 }}>pid {daemon.pid}</span>}
           </>
         )}
       </div>
@@ -616,7 +630,7 @@ function SpoolSection({ spool }) {
         </div>
       </div>
 
-      {/* ── Footer : terminés récents ── */}
+      {/* ── Footer : terminés récents (spool_status) ── */}
       {recent_done?.length > 0 && (
         <div style={{ borderTop: "1px solid rgba(99,102,241,0.08)", padding: "8px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -638,6 +652,64 @@ function SpoolSection({ spool }) {
                 <span style={{ color: "#0f172a" }}>{fmtTime(d.completed_at)}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Sessions inspect_session ── */}
+      {(activeSessions.length > 0 || doneSessions.length > 0) && (
+        <div style={{ borderTop: "1px solid rgba(99,102,241,0.1)", padding: "10px 16px" }}>
+          <div style={{ color: "rgba(99,102,241,0.5)", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
+            Pipeline inspect_session
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {/* Sessions actives */}
+            {activeSessions.map((s, i) => {
+              const insp = s.inspection ?? {};
+              const upl  = s.upload ?? {};
+              const isPipeline = s.step === "upload" || s.pipeline_status === "inspection_passed";
+              return (
+                <div key={s.session_id ?? i} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "4px 8px", borderRadius: 4, fontSize: 9,
+                  background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.12)",
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: isPipeline ? "#f59e0b" : "#22d3ee", flexShrink: 0 }} />
+                  <span style={{ color: "#6366f1", fontFamily: "monospace", flexShrink: 0 }}>{shortId(s.session_id)}</span>
+                  <span style={{ color: "#475569" }}>{s.step}/{s.status}</span>
+                  {s.step === "upload" && upl.file_total > 0 && (
+                    <>
+                      <SpoolProgressBar pct={Math.round((upl.files_uploaded / upl.file_total) * 100)} color="#f59e0b" />
+                      <span style={{ color: "#f59e0b", flexShrink: 0 }}>{upl.files_uploaded}/{upl.file_total}</span>
+                      {upl.speed_mbps > 0 && <span style={{ color: "#475569", flexShrink: 0 }}>{upl.speed_mbps.toFixed(1)} MB/s</span>}
+                    </>
+                  )}
+                  {s.step === "inspection" && insp.total_checks > 0 && (
+                    <span style={{ color: "#22d3ee" }}>{insp.total_checks} checks</span>
+                  )}
+                  {s.metadata?.scenario && (
+                    <span style={{ color: "#334155", marginLeft: "auto" }}>{s.metadata.scenario}</span>
+                  )}
+                </div>
+              );
+            })}
+            {/* Historique récent */}
+            {doneSessions.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: activeSessions.length > 0 ? 4 : 0 }}>
+                <span style={{ color: "#1e3a5f", fontSize: 9, flexShrink: 0 }}>Terminées :</span>
+                {doneSessions.slice(0, 10).map((s, i) => {
+                  const outcome = s.outcome ?? s.pipeline_status;
+                  const isOk    = outcome === "ok" || outcome === "completed";
+                  return (
+                    <div key={s.session_id ?? i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9 }}>
+                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: isOk ? "#22c55e" : "#ef4444", flexShrink: 0 }} />
+                      <span style={{ color: isOk ? "#1a3a1a" : "#3a1a1a", fontFamily: "monospace" }}>{shortId(s.session_id)}</span>
+                      {s.metadata?.scenario && <span style={{ color: "#1e293b" }}>{s.metadata.scenario}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
