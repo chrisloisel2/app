@@ -84,10 +84,25 @@ def _exec_on_host(doc, command, result_queue):
     try:
         ssh.connect(ip, port=port, username=username, password=password, timeout=10,
                     look_for_keys=False, allow_agent=False)
-        _, stdout, stderr = ssh.exec_command(command, timeout=30)
-        out = stdout.read().decode("utf-8", errors="replace").rstrip()
-        err = stderr.read().decode("utf-8", errors="replace").rstrip()
-        code = stdout.channel.recv_exit_status()
+        channel = ssh.get_transport().open_session()
+        channel.get_pty()
+        channel.exec_command(command)
+        channel.settimeout(30)
+
+        out_buf = b""
+        while True:
+            if channel.recv_ready():
+                out_buf += channel.recv(4096)
+            elif channel.exit_status_ready():
+                while channel.recv_ready():
+                    out_buf += channel.recv(4096)
+                break
+            else:
+                time.sleep(0.05)
+
+        out  = out_buf.decode("utf-8", errors="replace").rstrip()
+        err  = ""
+        code = channel.recv_exit_status()
         result_queue.put({"hostname": hostname, "ip": ip, "stdout": out, "stderr": err, "exit_code": code})
     except Exception as e:
         result_queue.put({"hostname": hostname, "ip": ip, "stdout": "", "stderr": str(e), "exit_code": -1})
