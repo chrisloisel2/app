@@ -93,13 +93,15 @@ def translate_command(cmd: str) -> str:
 
 
 # ── Nettoyage sortie PTY Windows ──────────────────────────────────────────────
-_ANSI_RE   = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b.")
+_ANSI_RE   = re.compile(r"\x1b\[[\?]?[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b.")
 _PS_PROMPT = re.compile(r"^PS\s+[A-Z]:\\.*?>?\s*$", re.MULTILINE)
 
 def clean_pty_output(raw: str, original_cmd: str, translated_cmd: str) -> str:
     """Nettoie la sortie brute d'un PTY Windows/PowerShell."""
-    # Supprime séquences ANSI/VT
+    # Supprime séquences ANSI/VT (y compris modes privés DEC ?25l ?25h ?9001h etc.)
     text = _ANSI_RE.sub("", raw)
+    # Séquences VT restantes non capturées par le regex (ex: standalone ?25h sans ESC)
+    text = re.sub(r"\?[0-9]+[lh]", "", text)
     # Normalise les sauts de ligne Windows
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
