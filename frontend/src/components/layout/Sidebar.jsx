@@ -154,6 +154,58 @@ export default function Sidebar() {
             </NavLink>
           ))}
         </div>
+
+        {/* PHYSICAL DATA — RÉFÉRENTIEL */}
+        <div>
+          {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Référentiel</p>}
+          {[
+            { to: "/projects",         label: "Projets",          icon: "◫" },
+            { to: "/rigs",             label: "Rigs",             icon: "⬡" },
+            { to: "/shift-calendar",   label: "Shifts",           icon: "◷" },
+            { to: "/project-planning", label: "Planning",         icon: "◰" },
+          ].map(({ to, label, icon }) => (
+            <NavLink key={to} to={to} title={label}
+              className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}>
+              <span className="shrink-0 text-base">{icon}</span>
+              {expanded && <span className="whitespace-nowrap">{label}</span>}
+            </NavLink>
+          ))}
+        </div>
+
+        {/* PHYSICAL DATA — PRODUCTION */}
+        <div>
+          {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Capture & QA</p>}
+          {[
+            { to: "/video-runs",           label: "Video Runs",       icon: "▶" },
+            { to: "/qa-results",           label: "QA Results",       icon: "◉" },
+            { to: "/annotation-audits",    label: "Annotation Audits",icon: "◎" },
+            { to: "/incidents",            label: "Incidents",        icon: "⚠" },
+          ].map(({ to, label, icon }) => (
+            <NavLink key={to} to={to} title={label}
+              className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}>
+              <span className="shrink-0 text-base">{icon}</span>
+              {expanded && <span className="whitespace-nowrap">{label}</span>}
+            </NavLink>
+          ))}
+        </div>
+
+        {/* PHYSICAL DATA — OPÉRATIONS */}
+        <div>
+          {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Opérations</p>}
+          {[
+            { to: "/staff-attendance",      label: "Présences",        icon: "◑" },
+            { to: "/delivery-tracking",     label: "Livraisons",       icon: "◳" },
+            { to: "/cost-events",           label: "Coûts",            icon: "◈" },
+            { to: "/rig-status-snapshots",  label: "Rig Snapshots",    icon: "◌" },
+            { to: "/kpi-aggregates",        label: "KPI Aggregates",   icon: "◇" },
+          ].map(({ to, label, icon }) => (
+            <NavLink key={to} to={to} title={label}
+              className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}>
+              <span className="shrink-0 text-base">{icon}</span>
+              {expanded && <span className="whitespace-nowrap">{label}</span>}
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
       <div className={`py-3 border-t border-gray-800 shrink-0 flex items-center gap-2 ${expanded ? "px-4 justify-between" : "flex-col justify-center"}`}>

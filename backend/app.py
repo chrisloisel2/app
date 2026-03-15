@@ -125,6 +125,97 @@ except Exception:
     sys.exit(1)
 
 try:
+    from routes.projects import projects_bp
+    logger.info("routes.projects imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.projects:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.rigs import rigs_bp
+    logger.info("routes.rigs imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.rigs:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.shift_calendar import shift_calendar_bp
+    logger.info("routes.shift_calendar imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.shift_calendar:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.project_planning import project_planning_bp
+    logger.info("routes.project_planning imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.project_planning:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.video_runs import video_runs_bp
+    logger.info("routes.video_runs imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.video_runs:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.qa_results import qa_results_bp
+    logger.info("routes.qa_results imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.qa_results:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.annotation_audits import annotation_audits_bp
+    logger.info("routes.annotation_audits imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.annotation_audits:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.incidents import incidents_bp
+    logger.info("routes.incidents imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.incidents:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.staff_attendance import staff_attendance_bp
+    logger.info("routes.staff_attendance imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.staff_attendance:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.delivery_tracking import delivery_tracking_bp
+    logger.info("routes.delivery_tracking imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.delivery_tracking:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.cost_events import cost_events_bp
+    logger.info("routes.cost_events imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.cost_events:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.rig_status_snapshots import rig_status_snapshots_bp
+    logger.info("routes.rig_status_snapshots imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.rig_status_snapshots:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from routes.kpi_aggregates import kpi_aggregates_bp
+    logger.info("routes.kpi_aggregates imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.kpi_aggregates:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
     from kafka_consumer import start_consumer
     logger.info("kafka_consumer imported OK")
 except Exception:
@@ -172,6 +263,19 @@ app.register_blueprint(annotateurs_bp)
 app.register_blueprint(scenarios_bp)
 app.register_blueprint(kafka_logs_bp)
 app.register_blueprint(ssh_parc_bp)
+app.register_blueprint(projects_bp)
+app.register_blueprint(rigs_bp)
+app.register_blueprint(shift_calendar_bp)
+app.register_blueprint(project_planning_bp)
+app.register_blueprint(video_runs_bp)
+app.register_blueprint(qa_results_bp)
+app.register_blueprint(annotation_audits_bp)
+app.register_blueprint(incidents_bp)
+app.register_blueprint(staff_attendance_bp)
+app.register_blueprint(delivery_tracking_bp)
+app.register_blueprint(cost_events_bp)
+app.register_blueprint(rig_status_snapshots_bp)
+app.register_blueprint(kpi_aggregates_bp)
 
 from routes.salle import register_ws_route
 register_ws_route(sock)

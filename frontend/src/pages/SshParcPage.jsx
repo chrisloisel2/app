@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { fetchSshParc, deleteSshEntry, clearSshParc } from "../api/client";
+import { fetchSshParc } from "../api/client";
 
 // ── Palette worm / terminal ────────────────────────────────────────────────────
 const C = {
@@ -23,168 +23,6 @@ const C = {
 const mono = "'JetBrains Mono','Fira Code','Cascadia Code',monospace";
 
 // ── Utilitaires ───────────────────────────────────────────────────────────────
-function since(ts) {
-  if (!ts) return "—";
-  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
-  if (diff < 60)  return `${diff}s`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`;
-  return `${Math.floor(diff / 86400)}j`;
-}
-
-function fmtTs(ts) {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleString("fr-FR", {
-    day: "2-digit", month: "2-digit", year: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-}
-
-// ── Composants UI ─────────────────────────────────────────────────────────────
-
-function GlowDot({ color = C.green }) {
-  return (
-    <span style={{
-      display: "inline-block",
-      width: 7, height: 7, borderRadius: "50%",
-      background: color,
-      boxShadow: `0 0 6px ${color}88`,
-      flexShrink: 0,
-    }} />
-  );
-}
-
-function StatCard({ label, value, color = C.green, sub }) {
-  return (
-    <div style={{
-      background: C.bgCard,
-      border: `1px solid ${C.border}`,
-      borderRadius: 6,
-      padding: "14px 20px",
-      minWidth: 130,
-    }}>
-      <div style={{ color: C.gray, fontSize: 10, fontFamily: mono, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>
-        {label}
-      </div>
-      <div style={{ color, fontSize: 26, fontFamily: mono, fontWeight: 700, textShadow: C.greenGlow, lineHeight: 1 }}>
-        {value}
-      </div>
-      {sub && <div style={{ color: C.grayLight, fontSize: 10, fontFamily: mono, marginTop: 4 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function CopyBtn({ text }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-  return (
-    <button
-      onClick={copy}
-      title="Copier"
-      style={{
-        background: "none",
-        border: `1px solid ${copied ? C.green : C.greenFaint}`,
-        borderRadius: 3,
-        color: copied ? C.green : C.gray,
-        fontSize: 9,
-        fontFamily: mono,
-        padding: "1px 6px",
-        cursor: "pointer",
-        transition: "all .15s",
-        flexShrink: 0,
-      }}
-    >
-      {copied ? "✓ copié" : "copy"}
-    </button>
-  );
-}
-
-// ── Ligne de PC ───────────────────────────────────────────────────────────────
-function PcRow({ doc, onDelete }) {
-  const [hov, setHov] = useState(false);
-  const [confirm, setConfirm] = useState(false);
-
-  const handleDelete = () => {
-    if (!confirm) { setConfirm(true); return; }
-    onDelete(doc._id);
-  };
-
-  return (
-    <tr
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => { setHov(false); setConfirm(false); }}
-      style={{ background: hov ? C.bgRowHov : C.bgRow, transition: "background .1s" }}
-    >
-      {/* Status */}
-      <td style={{ padding: "10px 14px", width: 28 }}>
-        <GlowDot />
-      </td>
-
-      {/* Hostname */}
-      <td style={{ padding: "10px 0", fontFamily: mono, fontSize: 12, color: C.green, fontWeight: 700 }}>
-        {doc.hostname || "—"}
-      </td>
-
-      {/* IP */}
-      <td style={{ padding: "10px 16px", fontFamily: mono, fontSize: 12, color: C.cyan }}>
-        {doc.ip || "—"}
-      </td>
-
-      {/* Username */}
-      <td style={{ padding: "10px 16px", fontFamily: mono, fontSize: 11, color: C.grayLight }}>
-        {doc.username || "—"}
-      </td>
-
-      {/* OS */}
-      <td style={{ padding: "10px 16px", fontFamily: mono, fontSize: 10, color: C.gray }}>
-        {doc.os || "—"} {doc.os_release ? `(${doc.os_release})` : ""}
-      </td>
-
-      {/* SSH command */}
-      <td style={{ padding: "10px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            fontFamily: mono, fontSize: 11, color: C.greenDim,
-            background: C.greenFaint, borderRadius: 3,
-            padding: "2px 8px", letterSpacing: 0.3,
-          }}>
-            {doc.ssh_connection_string || "—"}
-          </span>
-          {doc.ssh_connection_string && <CopyBtn text={doc.ssh_connection_string} />}
-        </div>
-      </td>
-
-      {/* Timestamp */}
-      <td style={{ padding: "10px 16px", fontFamily: mono, fontSize: 10, color: C.gray, whiteSpace: "nowrap" }}>
-        <span title={fmtTs(doc.timestamp)}>{since(doc.timestamp)}</span>
-      </td>
-
-      {/* Actions */}
-      <td style={{ padding: "10px 14px", textAlign: "right" }}>
-        <button
-          onClick={handleDelete}
-          style={{
-            background: confirm ? "rgba(255,51,51,.15)" : "none",
-            border: `1px solid ${confirm ? C.red : C.greenFaint}`,
-            borderRadius: 3,
-            color: confirm ? C.red : C.gray,
-            fontSize: 9,
-            fontFamily: mono,
-            padding: "2px 8px",
-            cursor: "pointer",
-          }}
-        >
-          {confirm ? "confirmer" : "retirer"}
-        </button>
-      </td>
-    </tr>
-  );
-}
 
 // ── Scanline overlay déco ─────────────────────────────────────────────────────
 function Scanlines() {
@@ -324,7 +162,7 @@ function BroadcastTerminal({ docs }) {
       <div
         ref={outputRef}
         style={{
-          height: 380, overflowY: "auto",
+          height: 520, overflowY: "auto",
           padding: "12px 16px",
           fontFamily: mono, fontSize: 11,
         }}
@@ -442,14 +280,97 @@ function BroadcastTerminal({ docs }) {
   );
 }
 
+// ── Sidebar liste des PCs ─────────────────────────────────────────────────────
+function PcSidebar({ docs, loading }) {
+  const online = (doc) => doc.timestamp && (Date.now() - new Date(doc.timestamp).getTime()) < 300000;
+
+  return (
+    <div style={{
+      width: 220,
+      flexShrink: 0,
+      background: C.bgCard,
+      border: `1px solid ${C.border}`,
+      borderRadius: 8,
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: "8px 12px",
+        borderBottom: `1px solid ${C.border}`,
+        background: "#050e05",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+      }}>
+        <span style={{ color: C.green, fontFamily: mono, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+          MACHINES
+        </span>
+        <span style={{
+          marginLeft: "auto",
+          fontFamily: mono, fontSize: 9, color: C.gray,
+        }}>
+          {docs.filter(online).length}/{docs.length} en ligne
+        </span>
+      </div>
+
+      {/* Liste */}
+      <div style={{ overflowY: "auto", flex: 1 }}>
+        {loading ? (
+          <div style={{ padding: "20px 12px", fontFamily: mono, fontSize: 10, color: C.greenFaint }}>
+            initializing...
+          </div>
+        ) : docs.length === 0 ? (
+          <div style={{ padding: "20px 12px", fontFamily: mono, fontSize: 10, color: C.greenFaint }}>
+            aucun PC enregistré
+          </div>
+        ) : (
+          docs.map((doc, i) => (
+            <div key={doc._id} style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "7px 12px",
+              borderBottom: i < docs.length - 1 ? `1px solid #0a160a` : "none",
+            }}>
+              {/* Pastille */}
+              <span style={{
+                width: 8, height: 8, borderRadius: "50%",
+                flexShrink: 0,
+                background: online(doc) ? "#00ff41" : "#ff3333",
+                boxShadow: online(doc) ? "0 0 6px #00ff4188" : "0 0 6px #ff333388",
+              }} />
+              {/* Nom */}
+              <span style={{
+                fontFamily: mono, fontSize: 11, color: C.white,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {doc.hostname || doc.ip || "—"}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        padding: "6px 12px",
+        borderTop: `1px solid ${C.border}`,
+        fontFamily: mono, fontSize: 9, color: C.greenFaint,
+        background: "#050e05",
+      }}>
+        ↻ 15s
+      </div>
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function SshParcPage() {
   const [docs, setDocs]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
-  const [filter, setFilter]   = useState("");
-  const [clearing, setClearing] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
   const timerRef = useRef(null);
 
   const load = useCallback(() => {
@@ -465,34 +386,11 @@ export default function SshParcPage() {
     return () => clearInterval(timerRef.current);
   }, [load]);
 
-  const handleDelete = (id) => {
-    deleteSshEntry(id).then(load).catch(e => setError(e.message));
-  };
-
-  const handleClearAll = () => {
-    if (!confirmClear) { setConfirmClear(true); return; }
-    setClearing(true);
-    clearSshParc()
-      .then(() => { setDocs([]); setConfirmClear(false); })
-      .catch(e => setError(e.message))
-      .finally(() => setClearing(false));
-  };
-
-  const filtered = filter
-    ? docs.filter(d =>
-        [d.hostname, d.ip, d.username, d.ssh_connection_string, d.os]
-          .join(" ").toLowerCase().includes(filter.toLowerCase())
-      )
-    : docs;
-
-  const osCount = {};
-  docs.forEach(d => { osCount[d.os || "Inconnu"] = (osCount[d.os || "Inconnu"] || 0) + 1; });
-
   return (
     <div style={{ background: C.bg, minHeight: "100%", position: "relative" }}>
       <Scanlines />
 
-      <div style={{ position: "relative", zIndex: 1, padding: "24px 32px", maxWidth: 1400 }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "24px 32px", height: "100%", boxSizing: "border-box" }}>
 
         {/* ASCII Header */}
         <div style={{ marginBottom: 20, overflow: "hidden" }}>
@@ -514,98 +412,6 @@ export default function SshParcPage() {
             }}>
               {docs.length} machine{docs.length !== 1 ? "s" : ""} enregistrée{docs.length !== 1 ? "s" : ""}
             </span>
-            <span style={{
-              fontFamily: mono, fontSize: 10, color: C.gray,
-              animation: "none",
-            }}>
-              ↻ auto-refresh 15s
-            </span>
-          </div>
-        </div>
-
-        {/* Stats row */}
-        <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-          <StatCard label="PCs connectés" value={docs.length} />
-          <StatCard
-            label="En ligne"
-            value={docs.filter(d => d.timestamp && (Date.now() - new Date(d.timestamp).getTime()) < 300000).length}
-            color={C.green}
-            sub="< 5 min"
-          />
-          {Object.entries(osCount).map(([os, n]) => (
-            <StatCard key={os} label={os} value={n} color={C.cyan} />
-          ))}
-        </div>
-
-        {/* Toolbar */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 12, marginBottom: 16,
-          padding: "10px 14px",
-          background: C.bgCard,
-          border: `1px solid ${C.border}`,
-          borderRadius: 6,
-        }}>
-          {/* Filter */}
-          <span style={{ color: C.gray, fontFamily: mono, fontSize: 11 }}>$</span>
-          <input
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder="grep hostname / ip / user…"
-            style={{
-              flex: 1, maxWidth: 340,
-              background: "rgba(0,255,65,.04)",
-              border: `1px solid ${C.border}`,
-              borderRadius: 4,
-              padding: "6px 12px",
-              color: C.green,
-              fontFamily: mono,
-              fontSize: 12,
-              outline: "none",
-              caretColor: C.green,
-            }}
-          />
-
-          <span style={{ color: C.gray, fontFamily: mono, fontSize: 10 }}>
-            {filtered.length}/{docs.length}
-          </span>
-
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            {/* Refresh */}
-            <button
-              onClick={load}
-              style={{
-                background: "none",
-                border: `1px solid ${C.border}`,
-                borderRadius: 4,
-                color: C.grayLight,
-                fontFamily: mono,
-                fontSize: 10,
-                padding: "5px 14px",
-                cursor: "pointer",
-              }}
-            >
-              ↻ refresh
-            </button>
-
-            {/* Clear all */}
-            <button
-              onClick={handleClearAll}
-              onMouseLeave={() => setConfirmClear(false)}
-              disabled={clearing || docs.length === 0}
-              style={{
-                background: confirmClear ? "rgba(255,51,51,.12)" : "none",
-                border: `1px solid ${confirmClear ? C.red : C.greenFaint}`,
-                borderRadius: 4,
-                color: confirmClear ? C.red : C.gray,
-                fontFamily: mono,
-                fontSize: 10,
-                padding: "5px 14px",
-                cursor: "pointer",
-                opacity: docs.length === 0 ? 0.4 : 1,
-              }}
-            >
-              {confirmClear ? "⚠ confirmer purge" : "purger tout"}
-            </button>
           </div>
         </div>
 
@@ -621,57 +427,17 @@ export default function SshParcPage() {
           </div>
         )}
 
-        {/* Table */}
-        <div style={{
-          background: C.bgCard,
-          border: `1px solid ${C.border}`,
-          borderRadius: 8,
-          overflow: "hidden",
-        }}>
-          {loading ? (
-            <div style={{
-              padding: "60px 0", textAlign: "center",
-              fontFamily: mono, fontSize: 13, color: C.greenDim,
-            }}>
-              <span style={{ animation: "pulse 1s infinite" }}>initializing...</span>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div style={{
-              padding: "60px 0", textAlign: "center",
-              fontFamily: mono, color: C.greenFaint, fontSize: 13,
-            }}>
-              {docs.length === 0
-                ? "> aucun PC enregistré — lancez le script d'inventaire SSH sur chaque machine"
-                : "> aucun résultat pour ce filtre"}
-            </div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#050e05", borderBottom: `1px solid ${C.border}` }}>
-                  {["", "HOSTNAME", "IP", "USER", "OS", "SSH COMMAND", "LAST SEEN", ""].map((h, i) => (
-                    <th key={i} style={{
-                      padding: "9px 14px",
-                      fontFamily: mono, fontSize: 9,
-                      color: C.gray, textAlign: "left",
-                      letterSpacing: 1.5, fontWeight: 600,
-                      textTransform: "uppercase",
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((doc, i) => (
-                  <tr key={doc._id} style={{ borderBottom: i < filtered.length - 1 ? `1px solid #0d1a0d` : "none" }}>
-                    <PcRowCells doc={doc} onDelete={handleDelete} />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        {/* Layout principal : terminal + sidebar */}
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
 
-        {/* Terminal broadcast */}
-        <BroadcastTerminal docs={docs} />
+          {/* Terminal broadcast (zone principale) */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <BroadcastTerminal docs={docs} />
+          </div>
+
+          {/* Sidebar PCs */}
+          <PcSidebar docs={docs} loading={loading} />
+        </div>
 
         {/* Footer */}
         <div style={{
@@ -687,109 +453,3 @@ export default function SshParcPage() {
   );
 }
 
-// Séparation pour éviter la collision de hooks dans le tbody map
-function PcRowCells({ doc, onDelete }) {
-  const [hov, setHov] = useState(false);
-  const [confirm, setConfirm] = useState(false);
-
-  const isRecent = doc.timestamp && (Date.now() - new Date(doc.timestamp).getTime()) < 300000;
-
-  return (
-    <>
-      {/* Status dot */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 14px", width: 28, background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        <GlowDot color={isRecent ? C.green : C.gray} />
-      </td>
-
-      {/* Hostname */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 0", fontFamily: mono, fontSize: 12, color: C.green, fontWeight: 700, background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        {doc.hostname || "—"}
-      </td>
-
-      {/* IP */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 16px", fontFamily: mono, fontSize: 12, color: C.cyan, background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        {doc.ip || "—"}
-      </td>
-
-      {/* Username */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 16px", fontFamily: mono, fontSize: 11, color: C.grayLight, background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        {doc.username || "—"}
-      </td>
-
-      {/* OS */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 16px", fontFamily: mono, fontSize: 10, color: C.gray, background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        {doc.os || "—"}{doc.os_release ? ` (${doc.os_release})` : ""}
-      </td>
-
-      {/* SSH command */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 16px", background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            fontFamily: mono, fontSize: 11, color: C.greenDim,
-            background: C.greenFaint, borderRadius: 3,
-            padding: "2px 8px", letterSpacing: 0.3,
-          }}>
-            {doc.ssh_connection_string || "—"}
-          </span>
-          {doc.ssh_connection_string && <CopyBtn text={doc.ssh_connection_string} />}
-        </div>
-      </td>
-
-      {/* Last seen */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 16px", fontFamily: mono, fontSize: 10, color: C.gray, whiteSpace: "nowrap", background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        <span title={fmtTs(doc.timestamp)}>{since(doc.timestamp)}</span>
-      </td>
-
-      {/* Delete */}
-      <td
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => { setHov(false); setConfirm(false); }}
-        style={{ padding: "10px 14px", textAlign: "right", background: hov ? C.bgRowHov : C.bgRow }}
-      >
-        <button
-          onClick={() => { if (!confirm) { setConfirm(true); } else { onDelete(doc._id); } }}
-          style={{
-            background: confirm ? "rgba(255,51,51,.15)" : "none",
-            border: `1px solid ${confirm ? C.red : C.greenFaint}`,
-            borderRadius: 3,
-            color: confirm ? C.red : C.gray,
-            fontSize: 9,
-            fontFamily: mono,
-            padding: "2px 8px",
-            cursor: "pointer",
-          }}
-        >
-          {confirm ? "confirmer" : "retirer"}
-        </button>
-      </td>
-    </>
-  );
-}
