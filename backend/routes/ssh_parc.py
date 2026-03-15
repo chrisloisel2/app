@@ -77,11 +77,13 @@ def _exec_on_host(doc, command, result_queue):
         result_queue.put({"hostname": hostname, "ip": None, "stdout": "", "stderr": "Pas d'IP", "exit_code": -1})
         return
 
+    password = doc.get("password") or None
+
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
-        ssh.connect(ip, port=port, username=username, timeout=10,
-                    look_for_keys=True, allow_agent=True)
+        ssh.connect(ip, port=port, username=username, password=password, timeout=10,
+                    look_for_keys=False, allow_agent=False)
         _, stdout, stderr = ssh.exec_command(command, timeout=30)
         out = stdout.read().decode("utf-8", errors="replace").rstrip()
         err = stderr.read().decode("utf-8", errors="replace").rstrip()
