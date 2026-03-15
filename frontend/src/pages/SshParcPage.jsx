@@ -43,16 +43,110 @@ const ASCII = `
  ███████║███████║██║  ██║    ╚███╔███╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
  ╚══════╝╚══════╝╚═╝  ╚═╝     ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝`.trim();
 
+// ── Groupement intelligent des résultats ──────────────────────────────────────
+// Regroupe les machines qui ont exactement la même sortie
+function groupResults(results) {
+  const groups = []; // [{ stdout, stderr, exit_code, hosts: [{hostname, ip}] }]
+  for (const r of results) {
+    const key = `${r.exit_code}|||${r.stdout}|||${r.stderr}`;
+    const existing = groups.find(g => `${g.exit_code}|||${g.stdout}|||${g.stderr}` === key);
+    if (existing) {
+      existing.hosts.push({ hostname: r.hostname, ip: r.ip });
+    } else {
+      groups.push({ stdout: r.stdout, stderr: r.stderr, exit_code: r.exit_code, hosts: [{ hostname: r.hostname, ip: r.ip }] });
+    }
+  }
+  // Tri : succès d'abord, puis par nb de machines (desc)
+  return groups.sort((a, b) => {
+    if (a.exit_code === 0 && b.exit_code !== 0) return -1;
+    if (a.exit_code !== 0 && b.exit_code === 0) return 1;
+    return b.hosts.length - a.hosts.length;
+  });
+}
+
+// ── Bloc résultat groupé ───────────────────────────────────────────────────────
+function ResultGroup({ group, total }) {
+  const [expanded, setExpanded] = useState(false);
+  const isErr   = group.exit_code !== 0;
+  const allSame = group.hosts.length === total;
+  const borderColor = isErr ? "rgba(255,51,51,0.35)" : C.greenFaint;
+
+  return (
+    <div style={{
+      marginBottom: 6,
+      paddingLeft: 12,
+      borderLeft: `2px solid ${borderColor}`,
+    }}>
+      {/* Ligne hosts */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
+        {allSame ? (
+          <span style={{ color: C.cyan, fontFamily: mono, fontSize: 10, fontWeight: 700 }}>
+            ALL ({total})
+          </span>
+        ) : (
+          <button
+            onClick={() => setExpanded(x => !x)}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: C.cyan, fontFamily: mono, fontSize: 10, fontWeight: 700,
+              padding: 0,
+            }}
+          >
+            {expanded ? "▾" : "▸"} {group.hosts.length} machine{group.hosts.length > 1 ? "s" : ""}
+          </button>
+        )}
+        {expanded && group.hosts.map(h => (
+          <span key={h.hostname} style={{
+            fontFamily: mono, fontSize: 9, color: C.gray,
+            background: "#0a1a0a", border: `1px solid ${C.border}`,
+            borderRadius: 3, padding: "0 5px",
+          }}>
+            {h.hostname}
+          </span>
+        ))}
+        <span style={{
+          fontSize: 9,
+          color: isErr ? C.red : C.green,
+          border: `1px solid ${borderColor}`,
+          borderRadius: 2, padding: "0 4px",
+          marginLeft: "auto",
+        }}>
+          exit {group.exit_code}
+        </span>
+      </div>
+
+      {/* Sortie */}
+      {group.stdout && (
+        <pre style={{
+          margin: 0, color: C.white, fontSize: 11,
+          whiteSpace: "pre-wrap", wordBreak: "break-word",
+          background: "rgba(0,255,65,0.03)",
+          padding: "4px 8px", borderRadius: 3,
+        }}>{group.stdout}</pre>
+      )}
+      {group.stderr && (
+        <pre style={{
+          margin: 0, color: C.red, fontSize: 11,
+          whiteSpace: "pre-wrap", wordBreak: "break-word",
+          padding: "3px 6px",
+        }}>{group.stderr}</pre>
+      )}
+      {!group.stdout && !group.stderr && (
+        <span style={{ color: C.gray, fontSize: 10 }}>(aucune sortie)</span>
+      )}
+    </div>
+  );
+}
+
 // ── Terminal broadcast ────────────────────────────────────────────────────────
 function BroadcastTerminal({ docs }) {
   const [input, setInput]       = useState("");
-  const [history, setHistory]   = useState([]); // { cmd, results: [{hostname,ip,stdout,stderr,exit_code}], running, total }
+  const [history, setHistory]   = useState([]); // { cmd, translated, results, running, total, ts }
   const [histIdx, setHistIdx]   = useState(-1);
   const [cmdHistory, setCmdHistory] = useState([]);
   const outputRef = useRef(null);
   const inputRef  = useRef(null);
 
-  // Scroll en bas à chaque update
   useEffect(() => {
     if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
   }, [history]);
@@ -67,8 +161,7 @@ function BroadcastTerminal({ docs }) {
     setHistIdx(-1);
     setInput("");
 
-    const entry = { cmd, results: [], running: true, total: 0, ts: Date.now() };
-    // Capture l'index de manière stable via ref
+    const entry = { cmd, translated: null, results: [], running: true, total: 0, ts: Date.now() };
     setHistory(h => {
       idxRef.current = h.length;
       return [...h, entry];
@@ -97,9 +190,13 @@ function BroadcastTerminal({ docs }) {
           try {
             const msg = JSON.parse(line.slice(6));
             if (msg.type === "start") {
-              setHistory(h => h.map((e, i) => i === idx ? { ...e, total: msg.total } : e));
+              setHistory(h => h.map((e, i) => i === idx
+                ? { ...e, total: msg.total, translated: msg.translated }
+                : e));
             } else if (msg.type === "result") {
-              setHistory(h => h.map((e, i) => i === idx ? { ...e, results: [...e.results, msg] } : e));
+              setHistory(h => h.map((e, i) => i === idx
+                ? { ...e, results: [...e.results, msg] }
+                : e));
             } else if (msg.type === "done") {
               setHistory(h => h.map((e, i) => i === idx ? { ...e, running: false } : e));
             }
@@ -172,65 +269,54 @@ function BroadcastTerminal({ docs }) {
             {">"} Tape une commande pour l'exécuter sur tous les PCs...
           </span>
         )}
-        {history.map((entry, ei) => (
-          <div key={ei} style={{ marginBottom: 16 }}>
-            {/* Commande lancée */}
-            <div style={{ color: C.green, marginBottom: 4 }}>
-              <span style={{ color: C.gray }}>$</span>{" "}
-              <span style={{ color: C.green }}>{entry.cmd}</span>
-              <span style={{ color: C.gray, fontSize: 9, marginLeft: 12 }}>
-                {new Date(entry.ts).toLocaleTimeString("fr-FR")}
-                {entry.total > 0 && ` · ${entry.results.length}/${entry.total}`}
-                {entry.running && <span style={{ color: C.yellow }}> ↻ en cours…</span>}
-              </span>
-            </div>
-            {entry.error && (
-              <div style={{ color: C.red, paddingLeft: 12 }}>✗ {entry.error}</div>
-            )}
-            {/* Résultats par PC */}
-            {entry.results.map((r, ri) => (
-              <div key={ri} style={{
-                marginBottom: 6,
-                paddingLeft: 12,
-                borderLeft: `2px solid ${r.exit_code === 0 ? C.greenFaint : "rgba(255,51,51,0.3)"}`,
-              }}>
-                {/* Host header */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                  <span style={{ color: C.cyan, fontWeight: 700 }}>{r.hostname}</span>
-                  <span style={{ color: C.gray, fontSize: 9 }}>{r.ip}</span>
-                  <span style={{
-                    fontSize: 9,
-                    color: r.exit_code === 0 ? C.green : C.red,
-                    border: `1px solid ${r.exit_code === 0 ? C.greenFaint : "rgba(255,51,51,0.3)"}`,
-                    borderRadius: 2, padding: "0 4px",
-                  }}>
-                    exit {r.exit_code}
+        {history.map((entry, ei) => {
+          const groups = groupResults(entry.results);
+          const hasErrors = entry.results.some(r => r.exit_code !== 0);
+          const allOk     = entry.results.length > 0 && !hasErrors;
+          return (
+            <div key={ei} style={{ marginBottom: 20 }}>
+              {/* Commande + statut */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                <span style={{ color: C.gray }}>$</span>
+                <span style={{ color: C.green, fontWeight: 700 }}>{entry.cmd}</span>
+                {/* Commande traduite si différente */}
+                {entry.translated && entry.translated !== entry.cmd && (
+                  <span style={{ color: C.gray, fontSize: 9 }}>
+                    → <span style={{ color: C.grayLight }}>{entry.translated}</span>
                   </span>
-                </div>
-                {/* stdout */}
-                {r.stdout && (
-                  <pre style={{
-                    margin: 0, color: C.white, fontSize: 11,
-                    whiteSpace: "pre-wrap", wordBreak: "break-all",
-                    background: "rgba(0,255,65,0.03)",
-                    padding: "3px 6px", borderRadius: 3,
-                  }}>{r.stdout}</pre>
                 )}
-                {/* stderr */}
-                {r.stderr && (
-                  <pre style={{
-                    margin: 0, color: C.red, fontSize: 11,
-                    whiteSpace: "pre-wrap", wordBreak: "break-all",
-                    padding: "3px 6px",
-                  }}>{r.stderr}</pre>
+                <span style={{ color: C.gray, fontSize: 9, marginLeft: 4 }}>
+                  {new Date(entry.ts).toLocaleTimeString("fr-FR")}
+                </span>
+                {entry.total > 0 && (
+                  <span style={{ color: C.gray, fontSize: 9 }}>
+                    {entry.results.length}/{entry.total}
+                    {allOk && !entry.running && (
+                      <span style={{ color: C.green }}> ✓ OK</span>
+                    )}
+                    {hasErrors && !entry.running && (
+                      <span style={{ color: C.red }}> ✗ erreurs</span>
+                    )}
+                  </span>
                 )}
-                {!r.stdout && !r.stderr && (
-                  <span style={{ color: C.gray, fontSize: 10 }}>(aucune sortie)</span>
+                {entry.running && (
+                  <span style={{ color: C.yellow, fontSize: 9 }}>↻ en cours…</span>
                 )}
               </div>
-            ))}
-          </div>
-        ))}
+
+              {entry.error && (
+                <div style={{ color: C.red, paddingLeft: 12, fontSize: 11 }}>✗ {entry.error}</div>
+              )}
+
+              {/* Groupes de résultats */}
+              <div style={{ paddingLeft: 4 }}>
+                {groups.map((g, gi) => (
+                  <ResultGroup key={gi} group={g} total={entry.total} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Input */}
