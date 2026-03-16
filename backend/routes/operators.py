@@ -5,6 +5,7 @@ Route : /api/operators
 import logging
 from datetime import datetime, timezone
 
+from bson import ObjectId
 from flask import Blueprint, jsonify, request
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -15,15 +16,14 @@ logger = logging.getLogger(__name__)
 operators_bp = Blueprint("operators", __name__)
 
 DB_NAME = "physical_data"
-_mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-_col = _mongo[DB_NAME]["operators"]
 
 ROLES = ["capture_operator", "annotator", "auditor", "qa", "supervisor", "other"]
 STATUSES = ["active", "inactive", "left"]
 
 
-def _now():
-    return datetime.now(timezone.utc)
+def _get_col():
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+    return client[DB_NAME]["operators"]
 
 
 def _ser(doc):
@@ -31,6 +31,8 @@ def _ser(doc):
     for k, v in doc.items():
         if isinstance(v, datetime):
             out[k] = v.isoformat()
+        elif isinstance(v, ObjectId):
+            out[k] = str(v)
         else:
             out[k] = v
     return out
@@ -49,6 +51,7 @@ def _err(msg, status=400):
 
 @operators_bp.route("/api/operators", methods=["GET"])
 def list_operators():
+    col = _get_col()
     query = {}
     for param in ["role", "site_id", "status"]:
         v = request.args.get(param)
@@ -61,14 +64,15 @@ def list_operators():
     # Filtre pour les opérateurs du nouveau schéma (ont un champ full_name)
     query["full_name"] = {"$exists": True}
 
-    docs = list(_col.find(query).sort("full_name", 1).skip(skip).limit(limit))
-    total = _col.count_documents(query)
+    docs = list(col.find(query).sort("full_name", 1).skip(skip).limit(limit))
+    total = col.count_documents(query)
     return jsonify({"total": total, "items": [_ser(d) for d in docs]}), 200
 
 
 @operators_bp.route("/api/operators/<rid>", methods=["GET"])
 def get_operator(rid):
-    doc = _col.find_one({"_id": rid})
+    col = _get_col()
+    doc = col.find_one({"_id": rid})
     if not doc:
         return _err("Opérateur introuvable", 404)
     return jsonify(_ser(doc)), 200
@@ -76,6 +80,7 @@ def get_operator(rid):
 
 @operators_bp.route("/api/operators", methods=["POST"])
 def create_operator():
+    col = _get_col()
     body = request.get_json() or {}
     required = ["_id", "full_name", "role", "site_id", "status"]
     for f in required:
@@ -99,16 +104,18 @@ def create_operator():
         "cost_profile": body.get("cost_profile") or {},
     }
     try:
-        _col.insert_one(doc)
+        col.insert_one(doc)
     except DuplicateKeyError:
         return _err("Un opérateur avec cet ID existe déjà", 409)
     except PyMongoError as e:
+        logger.exception("MongoDB error on create_operator")
         return _err(str(e))
     return _ok({"operator": _ser(doc)}, 201)
 
 
 @operators_bp.route("/api/operators/<rid>", methods=["PUT"])
 def update_operator(rid):
+    col = _get_col()
     body = request.get_json() or {}
     upd = {}
     for field in ["full_name", "role", "site_id", "status", "employee_code", "skills", "cost_profile"]:
@@ -121,18 +128,20 @@ def update_operator(rid):
     if not upd:
         return _err("Aucun champ à mettre à jour")
     try:
-        res = _col.update_one({"_id": rid}, {"$set": upd})
+        res = col.update_one({"_id": rid}, {"$set": upd})
     except PyMongoError as e:
+        logger.exception("MongoDB error on update_operator")
         return _err(str(e))
     if res.matched_count == 0:
         return _err("Opérateur introuvable", 404)
-    doc = _col.find_one({"_id": rid})
+    doc = col.find_one({"_id": rid})
     return _ok({"operator": _ser(doc)})
 
 
 @operators_bp.route("/api/operators/<rid>", methods=["DELETE"])
 def delete_operator(rid):
-    result = _col.delete_one({"_id": rid})
+    col = _get_col()
+    result = col.delete_one({"_id": rid})
     if result.deleted_count == 0:
         return _err("Opérateur introuvable", 404)
     return _ok({"deleted": True})
