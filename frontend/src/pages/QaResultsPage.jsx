@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchQaResults, updateQaResult, deleteQaResult } from "../api/client";
+import { useReferenceData } from "../hooks/useReferenceData";
 
 const DECISIONS = ["accepted", "rejected", "rework", "pending"];
 const BADGE = {
@@ -13,6 +14,7 @@ const BADGE = {
 };
 
 export default function QaResultsPage() {
+  const { projects, operators, shifts } = useReferenceData();
   const [data, setData] = useState({ total: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -80,16 +82,27 @@ export default function QaResultsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {[["project_id", "Project ID"], ["operator_id", "Opérateur"], ["shift_id", "Shift"]].map(([k, label]) => (
-          <input key={k} value={filters[k]} onChange={(e) => setFilter(k, e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={label} />
-        ))}
-        <select value={filters.final_decision} onChange={(e) => setFilter("final_decision", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">Décision (tous)</option>
-          {DECISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
+        {(() => {
+          const cls = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+          return (<>
+            <select value={filters.project_id} onChange={(e) => setFilter("project_id", e.target.value)} className={cls}>
+              <option value="">Tous les projets</option>
+              {projects.map((p) => <option key={p._id} value={p._id}>{p.code} — {p.name}</option>)}
+            </select>
+            <select value={filters.operator_id} onChange={(e) => setFilter("operator_id", e.target.value)} className={cls}>
+              <option value="">Tous les opérateurs</option>
+              {operators.map((o) => <option key={o._id} value={o._id}>{o.full_name}</option>)}
+            </select>
+            <select value={filters.shift_id} onChange={(e) => setFilter("shift_id", e.target.value)} className={cls}>
+              <option value="">Tous les shifts</option>
+              {shifts.map((s) => <option key={s._id} value={s._id}>{s.date} · Shift {s.name}</option>)}
+            </select>
+            <select value={filters.final_decision} onChange={(e) => setFilter("final_decision", e.target.value)} className={cls}>
+              <option value="">Décision (tous)</option>
+              {DECISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </>);
+        })()}
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>}
@@ -109,9 +122,9 @@ export default function QaResultsPage() {
                   <tr key={item._id} className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-mono text-gray-500 text-xs max-w-[100px] truncate">{item._id}</td>
                     <td className="px-3 py-2 font-mono text-gray-500 text-xs max-w-[100px] truncate">{item.run_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.project_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.operator_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.shift_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{projects.find((p) => p._id === item.project_id)?.code ?? item.project_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{operators.find((o) => o._id === item.operator_id)?.full_name ?? item.operator_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{(() => { const s = shifts.find((x) => x._id === item.shift_id); return s ? `${s.date} · ${s.name}` : item.shift_id; })()}</td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{item.qa_at ? new Date(item.qa_at).toLocaleString("fr-FR") : "—"}</td>
                     <td className="px-3 py-2">{badge(item.final_decision)}</td>
                     <td className="px-3 py-2 text-center">{item.requires_rework ? "✓" : "—"}</td>

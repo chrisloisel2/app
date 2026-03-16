@@ -26,6 +26,8 @@ import DeliveryTrackingPage from "./pages/DeliveryTrackingPage";
 import CostEventsPage from "./pages/CostEventsPage";
 import RigStatusSnapshotsPage from "./pages/RigStatusSnapshotsPage";
 import KpiAggregatesPage from "./pages/KpiAggregatesPage";
+import PlanningPage from "./pages/PlanningPage";
+import OperatorsPage from "./pages/OperatorsPage";
 
 export default function App() {
   return (
@@ -64,6 +66,8 @@ export default function App() {
               <Route path="/cost-events"            element={<CostEventsPage />} />
               <Route path="/rig-status-snapshots"   element={<RigStatusSnapshotsPage />} />
               <Route path="/kpi-aggregates"         element={<KpiAggregatesPage />} />
+              <Route path="/planning"               element={<PlanningPage />} />
+              <Route path="/operators"              element={<OperatorsPage />} />
             </Routes>
           </main>
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchDeliveries, updateDelivery, deleteDelivery } from "../api/client";
+import { useReferenceData } from "../hooks/useReferenceData";
 
 const UPL_STATUSES = ["pending", "success", "failed"];
 const DEL_STATUSES = ["pending", "delivered", "failed"];
@@ -11,6 +12,7 @@ const BADGE = {
 };
 
 export default function DeliveryTrackingPage() {
+  const { projects, shifts } = useReferenceData();
   const [data, setData] = useState({ total: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -76,21 +78,27 @@ export default function DeliveryTrackingPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {[["project_id", "Project ID"], ["shift_id", "Shift ID"]].map(([k, label]) => (
-          <input key={k} value={filters[k]} onChange={(e) => setFilter(k, e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={label} />
-        ))}
-        <select value={filters.upload_status} onChange={(e) => setFilter("upload_status", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">Upload (tous)</option>
-          {UPL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={filters.delivery_status} onChange={(e) => setFilter("delivery_status", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">Livraison (tous)</option>
-          {DEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        {(() => {
+          const cls = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+          return (<>
+            <select value={filters.project_id} onChange={(e) => setFilter("project_id", e.target.value)} className={cls}>
+              <option value="">Tous les projets</option>
+              {projects.map((p) => <option key={p._id} value={p._id}>{p.code} — {p.name}</option>)}
+            </select>
+            <select value={filters.shift_id} onChange={(e) => setFilter("shift_id", e.target.value)} className={cls}>
+              <option value="">Tous les shifts</option>
+              {shifts.map((s) => <option key={s._id} value={s._id}>{s.date} · Shift {s.name}</option>)}
+            </select>
+            <select value={filters.upload_status} onChange={(e) => setFilter("upload_status", e.target.value)} className={cls}>
+              <option value="">Upload (tous)</option>
+              {UPL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select value={filters.delivery_status} onChange={(e) => setFilter("delivery_status", e.target.value)} className={cls}>
+              <option value="">Livraison (tous)</option>
+              {DEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </>);
+        })()}
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>}
@@ -109,9 +117,9 @@ export default function DeliveryTrackingPage() {
                 {data.items.map((item) => (
                   <tr key={item._id} className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-mono text-gray-500 text-xs">{item._id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.project_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{projects.find((p) => p._id === item.project_id)?.code ?? item.project_id}</td>
                     <td className="px-3 py-2 font-mono text-gray-500 text-xs">{item.run_id}</td>
-                    <td className="px-3 py-2 text-gray-600 text-xs">{item.shift_id}</td>
+                    <td className="px-3 py-2 text-gray-600 text-xs">{(() => { const s = shifts.find((x) => x._id === item.shift_id); return s ? `${s.date} · ${s.name}` : item.shift_id; })()}</td>
                     <td className="px-3 py-2">{badge(item.upload?.status)}</td>
                     <td className="px-3 py-2">{badge(item.delivery?.status)}</td>
                     <td className="px-3 py-2 text-center">{item.delivery?.on_time == null ? "—" : item.delivery.on_time ? <span className="text-green-600 font-semibold">✓</span> : <span className="text-red-500">✗</span>}</td>

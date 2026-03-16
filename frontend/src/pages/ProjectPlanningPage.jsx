@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchPlannings, createPlanning, updatePlanning, deletePlanning } from "../api/client";
+import { useReferenceData } from "../hooks/useReferenceData";
+import EntitySelect, { projectItems } from "../components/ui/EntitySelect";
 
 const EMPTY = { _id: "", project_id: "", date: "", planned_hours: "", planned_operators: "", planned_active_rigs: "", planned_delivery_deadline: "" };
 
 export default function ProjectPlanningPage() {
+  const { projects } = useReferenceData();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,6 +64,11 @@ export default function ProjectPlanningPage() {
     catch (err) { setError(err.response?.data?.error ?? err.message); setDeleteTarget(null); }
   };
 
+  const projectLabel = (id) => {
+    const p = projects.find((x) => x._id === id);
+    return p ? `${p.code} — ${p.name}` : id;
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -69,9 +77,14 @@ export default function ProjectPlanningPage() {
           <p className="text-sm text-gray-500 mt-0.5">Collection <code>project_planning</code></p>
         </div>
         <div className="flex gap-3 items-center">
-          <input value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Filtrer par project_id" />
+          <select
+            value={filterProject}
+            onChange={(e) => setFilterProject(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="">Tous les projets</option>
+            {projects.map((p) => <option key={p._id} value={p._id}>{p.code} — {p.name}</option>)}
+          </select>
           <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">+ Nouveau planning</button>
         </div>
       </div>
@@ -92,7 +105,7 @@ export default function ProjectPlanningPage() {
                 {items.map((item) => (
                   <tr key={item._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-gray-500 text-xs">{item._id}</td>
-                    <td className="px-4 py-3 text-gray-700">{item.project_id}</td>
+                    <td className="px-4 py-3 text-gray-700 text-xs">{projectLabel(item.project_id)}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900">{item.date}</td>
                     <td className="px-4 py-3 text-blue-700 font-semibold">{item.planned_hours}h</td>
                     <td className="px-4 py-3 text-gray-600">{item.planned_operators ?? "—"}</td>
@@ -123,10 +136,14 @@ export default function ProjectPlanningPage() {
                     placeholder="plan_prj_001_2026-03-15" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Project ID <span className="text-red-500">*</span></label>
-                  <input value={form.project_id} onChange={(e) => set("project_id", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="prj_001" required />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Projet <span className="text-red-500">*</span></label>
+                  <EntitySelect
+                    value={form.project_id}
+                    onChange={(v) => set("project_id", v ?? "")}
+                    items={projectItems(projects)}
+                    placeholder="— Sélectionner un projet —"
+                    required
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

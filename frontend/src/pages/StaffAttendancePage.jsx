@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAttendances, updateAttendance, deleteAttendance } from "../api/client";
+import { useReferenceData } from "../hooks/useReferenceData";
 
 export default function StaffAttendancePage() {
+  const { projects, operators, shifts } = useReferenceData();
   const [data, setData] = useState({ total: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -55,6 +57,9 @@ export default function StaffAttendancePage() {
   };
 
   const fmtH = (sec) => sec != null ? `${(sec / 3600).toFixed(1)}h` : "—";
+  const opLabel = (id) => { const o = operators.find((x) => x._id === id); return o ? o.full_name : id; };
+
+  const selectCls = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
 
   return (
     <div className="p-6 space-y-6">
@@ -66,11 +71,18 @@ export default function StaffAttendancePage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {[["project_id", "Project ID"], ["shift_id", "Shift ID"], ["operator_id", "Opérateur"]].map(([k, label]) => (
-          <input key={k} value={filters[k]} onChange={(e) => setFilter(k, e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={label} />
-        ))}
+        <select value={filters.project_id} onChange={(e) => setFilter("project_id", e.target.value)} className={selectCls}>
+          <option value="">Tous les projets</option>
+          {projects.map((p) => <option key={p._id} value={p._id}>{p.code} — {p.name}</option>)}
+        </select>
+        <select value={filters.operator_id} onChange={(e) => setFilter("operator_id", e.target.value)} className={selectCls}>
+          <option value="">Tous les opérateurs</option>
+          {operators.map((o) => <option key={o._id} value={o._id}>{o.full_name}</option>)}
+        </select>
+        <select value={filters.shift_id} onChange={(e) => setFilter("shift_id", e.target.value)} className={selectCls}>
+          <option value="">Tous les shifts</option>
+          {shifts.map((s) => <option key={s._id} value={s._id}>{s.date} · Shift {s.name}</option>)}
+        </select>
         <input type="date" value={filters.date} onChange={(e) => setFilter("date", e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
@@ -91,7 +103,7 @@ export default function StaffAttendancePage() {
                 {data.items.map((item) => (
                   <tr key={item._id} className={`hover:bg-gray-50 ${!item.present ? "opacity-60" : ""}`}>
                     <td className="px-3 py-2 font-semibold text-gray-900 text-xs">{item.date}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.operator_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{opLabel(item.operator_id)}</td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{item.role}</td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{item.shift_id}</td>
                     <td className="px-3 py-2 text-center">{item.scheduled ? "✓" : "—"}</td>
@@ -123,6 +135,9 @@ export default function StaffAttendancePage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-900">Modifier la présence</h2>
             <p className="text-xs font-mono text-gray-500">{editTarget._id}</p>
+            <p className="text-sm text-gray-600">
+              <span className="font-medium">{opLabel(editTarget.operator_id)}</span> · {editTarget.date} · Shift {editTarget.shift_id}
+            </p>
             {formError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{formError}</div>}
             <form onSubmit={handleSave} className="space-y-4">
               <div className="flex gap-6">

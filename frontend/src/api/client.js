@@ -55,6 +55,13 @@ export const fetchKpiDataIntegrity = ()            => api.get("/api/kpis/data-in
 export const fetchKpiFinance       = ()            => api.get("/api/kpis/finance");
 export const fetchKpiProduction    = ()            => api.get("/api/kpis/production");
 
+// ── Operators (physical_data) ─────────────────────────────────────────────────
+export const fetchOperators  = (params)     => api.get("/api/operators", { params });
+export const fetchOperator   = (id)         => api.get(`/api/operators/${id}`);
+export const createOperator  = (body)       => api.post("/api/operators", body);
+export const updateOperator  = (id, body)   => api.put(`/api/operators/${id}`, body);
+export const deleteOperator  = (id)         => api.delete(`/api/operators/${id}`);
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 export const fetchProjects   = (params)     => api.get("/api/projects", { params });
 export const fetchProject    = (id)         => api.get(`/api/projects/${id}`);

@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchCostEvents, createCostEvent, updateCostEvent, deleteCostEvent } from "../api/client";
+import { useReferenceData } from "../hooks/useReferenceData";
+import EntitySelect, { projectItems, operatorItems, shiftItems } from "../components/ui/EntitySelect";
 
 const COST_FIELDS = ["labor_cost", "rig_cost", "energy_cost", "storage_cost", "rework_cost", "qa_cost"];
 const EMPTY = { _id: "", date: "", project_id: "", site_id: "", shift_id: "", operator_id: "", currency: "EUR", source: "",
   costs: { labor_cost: "", rig_cost: "", energy_cost: "", storage_cost: "", rework_cost: "", qa_cost: "" } };
 
 export default function CostEventsPage() {
+  const { projects, operators, shifts } = useReferenceData();
   const [data, setData] = useState({ total: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -75,10 +78,13 @@ export default function CostEventsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {[["project_id", "Project ID"], ["site_id", "Site ID"]].map(([k, label]) => (
-          <input key={k} value={filters[k]} onChange={(e) => setFilter(k, e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder={label} />
-        ))}
+        <select value={filters.project_id} onChange={(e) => setFilter("project_id", e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <option value="">Tous les projets</option>
+          {projects.map((p) => <option key={p._id} value={p._id}>{p.code} — {p.name}</option>)}
+        </select>
+        <input value={filters.site_id} onChange={(e) => setFilter("site_id", e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Site ID" />
         <input type="date" value={filters.date} onChange={(e) => setFilter("date", e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
@@ -102,7 +108,7 @@ export default function CostEventsPage() {
                   return (
                     <tr key={item._id} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-semibold text-gray-900 text-xs">{item.date}</td>
-                      <td className="px-3 py-2 text-gray-700 text-xs">{item.project_id}</td>
+                      <td className="px-3 py-2 text-gray-700 text-xs">{projects.find((p) => p._id === item.project_id)?.code ?? item.project_id}</td>
                       <td className="px-3 py-2 text-gray-600 text-xs">{item.site_id}</td>
                       <td className="px-3 py-2 text-gray-600 text-xs">{c.labor_cost ?? "—"}</td>
                       <td className="px-3 py-2 text-gray-600 text-xs">{c.rig_cost ?? "—"}</td>
@@ -150,9 +156,9 @@ export default function CostEventsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Project ID <span className="text-red-500">*</span></label>
-                  <input value={form.project_id} onChange={(e) => set("project_id", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Projet <span className="text-red-500">*</span></label>
+                  <EntitySelect value={form.project_id} onChange={(v) => set("project_id", v ?? "")}
+                    items={projectItems(projects)} placeholder="— Sélectionner —" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Site ID <span className="text-red-500">*</span></label>
@@ -162,9 +168,9 @@ export default function CostEventsPage() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Shift ID</label>
-                  <input value={form.shift_id} onChange={(e) => set("shift_id", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Shift</label>
+                  <EntitySelect value={form.shift_id} onChange={(v) => set("shift_id", v ?? "")}
+                    items={shiftItems(shifts)} placeholder="— Aucun shift —" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Devise <span className="text-red-500">*</span></label>

@@ -159,10 +159,12 @@ export default function Sidebar() {
         <div>
           {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Référentiel</p>}
           {[
+            { to: "/planning",         label: "Vue Planning",     icon: "▦" },
             { to: "/projects",         label: "Projets",          icon: "◫" },
+            { to: "/operators",        label: "Opérateurs HD",    icon: "◉" },
             { to: "/rigs",             label: "Rigs",             icon: "⬡" },
             { to: "/shift-calendar",   label: "Shifts",           icon: "◷" },
-            { to: "/project-planning", label: "Planning",         icon: "◰" },
+            { to: "/project-planning", label: "Planning DB",      icon: "◰" },
           ].map(({ to, label, icon }) => (
             <NavLink key={to} to={to} title={label}
               className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}>

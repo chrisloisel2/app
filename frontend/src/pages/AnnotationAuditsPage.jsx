@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAnnotationAudits, updateAnnotationAudit, deleteAnnotationAudit } from "../api/client";
+import { useReferenceData } from "../hooks/useReferenceData";
+import EntitySelect, { operatorItems, projectItems } from "../components/ui/EntitySelect";
 
 const RESULTS = ["pass", "fail", "warning"];
 const BADGE = { pass: "bg-green-100 text-green-700", fail: "bg-red-100 text-red-700", warning: "bg-yellow-100 text-yellow-700" };
 
 export default function AnnotationAuditsPage() {
+  const { projects, operators } = useReferenceData();
   const [data, setData] = useState({ total: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -73,16 +76,29 @@ export default function AnnotationAuditsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {[["project_id", "Project ID"], ["annotator_id", "Annotateur"], ["auditor_id", "Auditeur"]].map(([k, label]) => (
-          <input key={k} value={filters[k]} onChange={(e) => setFilter(k, e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={label} />
-        ))}
-        <select value={filters.audit_result} onChange={(e) => setFilter("audit_result", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">Résultat (tous)</option>
-          {RESULTS.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
+        {(() => {
+          const cls = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+          const annotators = operators.filter((o) => ["annotator", "other"].includes(o.role));
+          const auditors = operators.filter((o) => ["auditor", "qa", "supervisor", "other"].includes(o.role));
+          return (<>
+            <select value={filters.project_id} onChange={(e) => setFilter("project_id", e.target.value)} className={cls}>
+              <option value="">Tous les projets</option>
+              {projects.map((p) => <option key={p._id} value={p._id}>{p.code} — {p.name}</option>)}
+            </select>
+            <select value={filters.annotator_id} onChange={(e) => setFilter("annotator_id", e.target.value)} className={cls}>
+              <option value="">Tous les annotateurs</option>
+              {annotators.map((o) => <option key={o._id} value={o._id}>{o.full_name}</option>)}
+            </select>
+            <select value={filters.auditor_id} onChange={(e) => setFilter("auditor_id", e.target.value)} className={cls}>
+              <option value="">Tous les auditeurs</option>
+              {auditors.map((o) => <option key={o._id} value={o._id}>{o.full_name}</option>)}
+            </select>
+            <select value={filters.audit_result} onChange={(e) => setFilter("audit_result", e.target.value)} className={cls}>
+              <option value="">Résultat (tous)</option>
+              {RESULTS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </>);
+        })()}
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>}
@@ -101,9 +117,9 @@ export default function AnnotationAuditsPage() {
                 {data.items.map((item) => (
                   <tr key={item._id} className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-mono text-gray-500 text-xs">{item._id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.project_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.annotator_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.auditor_id ?? "—"}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{projects.find((p) => p._id === item.project_id)?.code ?? item.project_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{operators.find((o) => o._id === item.annotator_id)?.full_name ?? item.annotator_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{operators.find((o) => o._id === item.auditor_id)?.full_name ?? (item.auditor_id ?? "—")}</td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{item.audit_hour_bucket ? new Date(item.audit_hour_bucket).toLocaleString("fr-FR") : "—"}</td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{pct(item.annotation_metrics?.completeness_rate)}</td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{pct(item.annotation_metrics?.accuracy_rate)}</td>
@@ -154,9 +170,13 @@ export default function AnnotationAuditsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Auditeur ID</label>
-                <input value={editForm.auditor_id} onChange={(e) => setEditForm((f) => ({ ...f, auditor_id: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Auditeur</label>
+                <EntitySelect
+                  value={editForm.auditor_id}
+                  onChange={(v) => setEditForm((f) => ({ ...f, auditor_id: v }))}
+                  items={operatorItems(operators.filter((o) => ["auditor", "qa", "supervisor", "other"].includes(o.role)))}
+                  placeholder="— Aucun auditeur —"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Issues (séparées par virgule)</label>

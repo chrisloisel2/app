@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchVideoRuns, updateVideoRun, deleteVideoRun } from "../api/client";
+import { useReferenceData } from "../hooks/useReferenceData";
+import EntitySelect, { projectItems, operatorItems, rigItems, shiftItems } from "../components/ui/EntitySelect";
 
 const QA_STATUSES = ["pending", "accepted", "rejected", "rework"];
 const BADGE_COLORS = {
@@ -15,6 +17,7 @@ const BADGE_COLORS = {
 };
 
 export default function VideoRunsPage() {
+  const { projects, operators, rigs, shifts } = useReferenceData();
   const [data, setData] = useState({ total: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -67,6 +70,13 @@ export default function VideoRunsPage() {
     ? <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${BADGE_COLORS[val] ?? "bg-gray-100 text-gray-500"}`}>{val}</span>
     : <span className="text-xs text-gray-400">—</span>;
 
+  const opLabel = (id) => { const o = operators.find((x) => x._id === id); return o ? o.full_name : id; };
+  const projLabel = (id) => { const p = projects.find((x) => x._id === id); return p ? p.code : id; };
+  const rigLabel = (id) => { const r = rigs.find((x) => x._id === id); return r ? r.code : id; };
+  const shiftLabel = (id) => { const s = shifts.find((x) => x._id === id); return s ? `${s.date} · ${s.name}` : id; };
+
+  const selectCls = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -78,13 +88,23 @@ export default function VideoRunsPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        {[["project_id", "Project ID"], ["operator_id", "Opérateur"], ["rig_id", "Rig"], ["shift_id", "Shift"]].map(([k, label]) => (
-          <input key={k} value={filters[k]} onChange={(e) => setFilter(k, e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={label} />
-        ))}
-        <select value={filters.qa_status} onChange={(e) => setFilter("qa_status", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <select value={filters.project_id} onChange={(e) => setFilter("project_id", e.target.value)} className={selectCls}>
+          <option value="">Tous les projets</option>
+          {projects.map((p) => <option key={p._id} value={p._id}>{p.code} — {p.name}</option>)}
+        </select>
+        <select value={filters.operator_id} onChange={(e) => setFilter("operator_id", e.target.value)} className={selectCls}>
+          <option value="">Tous les opérateurs</option>
+          {operators.map((o) => <option key={o._id} value={o._id}>{o.full_name}{o.employee_code ? ` (${o.employee_code})` : ""}</option>)}
+        </select>
+        <select value={filters.rig_id} onChange={(e) => setFilter("rig_id", e.target.value)} className={selectCls}>
+          <option value="">Tous les rigs</option>
+          {rigs.map((r) => <option key={r._id} value={r._id}>{r.code}</option>)}
+        </select>
+        <select value={filters.shift_id} onChange={(e) => setFilter("shift_id", e.target.value)} className={selectCls}>
+          <option value="">Tous les shifts</option>
+          {shifts.map((s) => <option key={s._id} value={s._id}>{s.date} · Shift {s.name}</option>)}
+        </select>
+        <select value={filters.qa_status} onChange={(e) => setFilter("qa_status", e.target.value)} className={selectCls}>
           <option value="">QA status (tous)</option>
           {QA_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -106,10 +126,10 @@ export default function VideoRunsPage() {
                 {data.items.map((item) => (
                   <tr key={item._id} className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-mono text-gray-500 text-xs max-w-[120px] truncate">{item._id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.project_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.operator_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.rig_id}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{item.shift_id}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{projLabel(item.project_id)}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{opLabel(item.operator_id)}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{rigLabel(item.rig_id)}</td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">{shiftLabel(item.shift_id)}</td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{item.video?.raw_duration_sec ? `${item.video.raw_duration_sec}s` : "—"}</td>
                     <td className="px-3 py-2">{badge(item.pipeline_status?.qa_status)}</td>
                     <td className="px-3 py-2">{badge(item.pipeline_status?.annotation_status)}</td>

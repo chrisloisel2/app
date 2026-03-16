@@ -125,6 +125,13 @@ except Exception:
     sys.exit(1)
 
 try:
+    from routes.operators import operators_bp
+    logger.info("routes.operators imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.operators:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
     from routes.projects import projects_bp
     logger.info("routes.projects imported OK")
 except Exception:
@@ -263,6 +270,7 @@ app.register_blueprint(annotateurs_bp)
 app.register_blueprint(scenarios_bp)
 app.register_blueprint(kafka_logs_bp)
 app.register_blueprint(ssh_parc_bp)
+app.register_blueprint(operators_bp)
 app.register_blueprint(projects_bp)
 app.register_blueprint(rigs_bp)
 app.register_blueprint(shift_calendar_bp)
