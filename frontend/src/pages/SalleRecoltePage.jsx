@@ -49,6 +49,10 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
     ? (alertBlink ? "rgba(239,68,68,0.6)" : "rgba(239,68,68,0.05)")
     : isRecording ? "rgba(168,85,247,0.4)" : c.glow;
 
+  // disk
+  const diskPct  = pc.disk_used_pct;
+  const diskFree = pc.disk_free_gb;
+  const diskColor = diskPct == null ? null : diskPct > 90 ? "#ef4444" : diskPct > 75 ? "#f59e0b" : "#22c55e";
   // cameras
   const cameras = pc.cameras ?? [];
   // grippers / pinces
@@ -122,6 +126,15 @@ const PcBox = memo(function PcBox({ pc, selected, onClick }) {
           {upload?.status === "sending" && !isRecording && <span style={{ background: "#f59e0b", color: "#000", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>⬆</span>}
           {upload?.status === "queued"  && !isRecording && <span style={{ background: "#6366f1", color: "#fff", fontSize: 7, fontWeight: 700, borderRadius: 2, padding: "1px 3px" }}>Q</span>}
         </div>
+        {/* Mini barre disque */}
+        {diskPct != null && (
+          <div title={`Disque : ${diskPct.toFixed(1)}% utilisé · ${diskFree?.toFixed(1)} GB libres`} style={{ marginTop: 2 }}>
+            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 1, height: 2 }}>
+              <div style={{ width: `${Math.min(100, diskPct)}%`, height: "100%", background: diskColor, borderRadius: 1 }} />
+            </div>
+            <span style={{ color: diskColor, fontSize: 7, fontWeight: 700 }}>{diskPct.toFixed(0)}%</span>
+          </div>
+        )}
       </div>
 
       {/* ════ COLONNE DROITE : périphériques ════ */}
@@ -255,6 +268,35 @@ function PcDetailPanel({ pc, onClose }) {
       <Row label="Alerte" value={pc.alert ? "⚠ OUI" : "Non"}
         color={pc.alert ? "#ef4444" : "#4b5563"} />
       <Row label="MAJ" value={pc.last_ts ? new Date(pc.last_ts * 1000).toLocaleTimeString("fr-FR") : "—"} />
+      {pc.sessions_count != null && (
+        <Row label="Sessions locale" value={pc.sessions_count} color="#94a3b8" />
+      )}
+
+      {/* Disque */}
+      {pc.disk_used_pct != null && (
+        <>
+          <Divider label="Stockage local" />
+          <div style={{ marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 4 }}>
+              <span style={{ color: "#6b7280" }}>Utilisé</span>
+              <span style={{ color: pc.disk_used_pct > 90 ? "#ef4444" : pc.disk_used_pct > 75 ? "#f59e0b" : "#22c55e", fontWeight: 700 }}>
+                {pc.disk_used_pct.toFixed(1)}%
+              </span>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 3, height: 5 }}>
+              <div style={{
+                width: `${Math.min(100, pc.disk_used_pct)}%`, height: "100%", borderRadius: 3,
+                background: pc.disk_used_pct > 90 ? "#ef4444" : pc.disk_used_pct > 75 ? "#f59e0b" : "#22c55e",
+                transition: "width 0.4s",
+              }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#334155", marginTop: 3 }}>
+              <span>{pc.disk_free_gb?.toFixed(1)} GB libres</span>
+              <span>{pc.disk_total_gb?.toFixed(1)} GB total</span>
+            </div>
+          </div>
+        </>
+      )}
 
       {!pc.connected && !pc._never_seen && (
         <div style={{
@@ -718,6 +760,91 @@ function SpoolSection({ spool }) {
   );
 }
 
+// ── Section serveurs (server_heartbeat) ──────────────────────────────────────
+function ServersSection({ servers }) {
+  if (!servers || servers.length === 0) return null;
+
+  function fmtUptime(s) {
+    if (!s) return "—";
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  return (
+    <div style={{
+      marginTop: 16,
+      border: "1px solid rgba(34,211,238,0.15)",
+      borderRadius: 8,
+      background: "rgba(6,12,30,0.95)",
+      padding: "10px 16px",
+    }}>
+      <div style={{ color: "rgba(34,211,238,0.5)", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
+        Serveurs
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {servers.map(srv => {
+          const diskColor = srv.disk_used_pct > 90 ? "#ef4444" : srv.disk_used_pct > 75 ? "#f59e0b" : "#22d3ee";
+          const hasQueue  = srv.queue_pending > 0 || srv.queue_processing > 0 || srv.queue_failed > 0;
+          return (
+            <div key={srv.server_id} style={{
+              flex: "1 1 200px",
+              background: "rgba(0,0,0,0.2)", borderRadius: 6,
+              border: "1px solid rgba(34,211,238,0.08)",
+              padding: "8px 12px",
+            }}>
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22d3ee", boxShadow: "0 0 4px #22d3ee88", flexShrink: 0 }} />
+                  <span style={{ color: "#94a3b8", fontSize: 10, fontWeight: 700, fontFamily: "monospace" }}>{srv.server_id}</span>
+                </div>
+                <span style={{ color: "#334155", fontSize: 9 }}>{srv.role}</span>
+              </div>
+              {/* Disque */}
+              {srv.disk_total_gb > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, marginBottom: 3 }}>
+                    <span style={{ color: "#475569" }}>Disque</span>
+                    <span style={{ color: diskColor, fontWeight: 700 }}>{srv.disk_used_pct.toFixed(1)}%</span>
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 2, height: 3 }}>
+                    <div style={{ width: `${Math.min(100, srv.disk_used_pct)}%`, height: "100%", background: diskColor, borderRadius: 2 }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#1e293b", marginTop: 2 }}>
+                    <span>{srv.disk_free_gb?.toFixed(1)} GB libres</span>
+                    <span>{srv.disk_total_gb?.toFixed(1)} GB</span>
+                  </div>
+                </div>
+              )}
+              {/* Sessions */}
+              <div style={{ display: "flex", gap: 10, fontSize: 9, marginBottom: hasQueue ? 8 : 0 }}>
+                {srv.sessions_inbox_count != null && (
+                  <span style={{ color: "#475569" }}>inbox <span style={{ color: "#94a3b8", fontWeight: 700 }}>{srv.sessions_inbox_count}</span></span>
+                )}
+                {srv.sessions_spool_count != null && (
+                  <span style={{ color: "#475569" }}>spool <span style={{ color: "#94a3b8", fontWeight: 700 }}>{srv.sessions_spool_count}</span></span>
+                )}
+                <span style={{ color: "#334155", marginLeft: "auto" }}>up {fmtUptime(srv.uptime_s)}</span>
+              </div>
+              {/* Files */}
+              {hasQueue && (
+                <div style={{ display: "flex", gap: 10, fontSize: 9 }}>
+                  <span style={{ color: "#475569" }}>⏳ <span style={{ color: "#f59e0b", fontWeight: 700 }}>{srv.queue_pending}</span></span>
+                  <span style={{ color: "#475569" }}>⚙ <span style={{ color: "#22d3ee", fontWeight: 700 }}>{srv.queue_processing}</span></span>
+                  <span style={{ color: "#475569" }}>✓ <span style={{ color: "#22c55e", fontWeight: 700 }}>{srv.queue_done}</span></span>
+                  {srv.queue_failed > 0 && (
+                    <span style={{ color: "#475569" }}>✗ <span style={{ color: "#ef4444", fontWeight: 700 }}>{srv.queue_failed}</span></span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Horodatage isolé ──────────────────────────────────────────────────────────
 function LastUpdateLabel({ lastUpdateRef }) {
   const [display, setDisplay] = useState("—");
@@ -744,6 +871,7 @@ export default function SalleRecoltePage() {
   const [stationsMap, setStationsMap] = useState(() => new Map());
   const [meta, setMeta]               = useState({ connected: false, errors: [] });
   const [spool, setSpool]             = useState(null);
+  const [servers, setServers]         = useState([]);
   const [loading, setLoading]         = useState(true);
   const [selectedPc, setSelectedPc]   = useState(null);
   const [lastWsMsg, setLastWsMsg]     = useState(null);
@@ -767,6 +895,7 @@ export default function SalleRecoltePage() {
     }
 
     if (msg.spool !== undefined) setSpool(msg.spool);
+    if (msg.servers !== undefined) setServers(msg.servers ?? []);
 
     const incoming = msg.stations ?? [];
     if (incoming.length > 0) {
@@ -1045,6 +1174,9 @@ export default function SalleRecoltePage() {
 
       {/* ── SPOOL ─────────────────────────────────────────────────────────── */}
       <SpoolSection spool={spool} />
+
+      {/* ── SERVEURS ──────────────────────────────────────────────────────── */}
+      <ServersSection servers={servers} />
 
       </>}
     </div>

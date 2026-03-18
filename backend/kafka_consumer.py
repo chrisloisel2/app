@@ -83,6 +83,12 @@ _spool = {
 _integrity_alerts: dict = {}
 INTEGRITY_ALERTS_MAX = 10
 
+# server_heartbeat state — keyed by server_id
+# server_id -> { server_id, role, ts, ts_iso, disk_free_gb, disk_total_gb, disk_used_pct,
+#                sessions_inbox_count, sessions_spool_count,
+#                queue_pending, queue_processing, queue_done, queue_failed, uptime_s }
+_server_heartbeats: dict = {}
+
 
 def _get_bootstrap_server():
     from config import KAFKA_BROKER, KAFKA_BROKER_PORT
@@ -164,6 +170,15 @@ def _default_station(station_id: str) -> dict:
         "device_faults": {},     # fault_key -> fault dict
         "connected": True,
         "last_ts":   0.0,
+        # Heartbeat fields
+        "disk_free_gb":      None,
+        "disk_total_gb":     None,
+        "disk_used_pct":     None,
+        "sessions_count":    None,
+        "operator_username": None,
+        "operator_firstname": None,
+        "operator_lastname":  None,
+        "operator_id":        None,
     }
 
 
@@ -383,6 +398,25 @@ def _handle_event(msg: dict) -> bool:
 
         # Alerte station active ssi des pannes device_fault restent non résolues
         st["alert"] = len(faults) > 0
+
+    elif event_type == "station_heartbeat":
+        # Heartbeat périodique de la station — mise à jour disk + sessions_count + infos opérateur
+        st["connected"]      = True
+        st["operator"]       = operator or st["operator"]
+        st["scenario"]       = scenario or st["scenario"]
+        st["disk_free_gb"]   = float(msg.get("disk_free_gb", 0.0))
+        st["disk_total_gb"]  = float(msg.get("disk_total_gb", 0.0))
+        st["disk_used_pct"]  = float(msg.get("disk_used_pct", 0.0))
+        st["sessions_count"] = int(msg.get("sessions_count", len(msg.get("sessions", []))))
+        # Infos opérateur enrichies
+        if msg.get("operator_username"):
+            st["operator_username"]  = msg["operator_username"]
+        if msg.get("operator_firstname"):
+            st["operator_firstname"] = msg["operator_firstname"]
+        if msg.get("operator_lastname"):
+            st["operator_lastname"]  = msg["operator_lastname"]
+        if msg.get("operator_id"):
+            st["operator_id"]        = msg["operator_id"]
 
     elif event_type == "session_integrity_error":
         alert = {
@@ -610,6 +644,26 @@ def _process_message(raw_value: bytes):
         elif "source" in msg and msg["source"] == "spool_daemon":
             # run.sh — lifecycle du daemon spool
             should_notify = _handle_spool_daemon(msg)
+        elif "source" in msg and msg["source"] == "server_heartbeat":
+            # Heartbeat serveur (spool/inbox) — état disque + queues
+            server_id = str(msg.get("server_id", "unknown"))
+            _server_heartbeats[server_id] = {
+                "server_id":              server_id,
+                "role":                   msg.get("role", ""),
+                "ts":                     float(msg.get("ts", 0.0)),
+                "ts_iso":                 msg.get("ts_iso", ""),
+                "disk_free_gb":           float(msg.get("disk_free_gb", 0.0)),
+                "disk_total_gb":          float(msg.get("disk_total_gb", 0.0)),
+                "disk_used_pct":          float(msg.get("disk_used_pct", 0.0)),
+                "sessions_inbox_count":   int(msg.get("sessions_inbox_count", 0)),
+                "sessions_spool_count":   int(msg.get("sessions_spool_count", 0)),
+                "queue_pending":          int(msg.get("queue_pending", 0)),
+                "queue_processing":       int(msg.get("queue_processing", 0)),
+                "queue_done":             int(msg.get("queue_done", 0)),
+                "queue_failed":           int(msg.get("queue_failed", 0)),
+                "uptime_s":               int(msg.get("uptime_s", 0)),
+            }
+            should_notify = True
         elif "type" in msg:
             # KafkaEventPublisher — événement cycle de vie
             should_notify = _handle_event(msg)
@@ -743,19 +797,28 @@ def get_stations_snapshot() -> dict:
                     connected = False
 
             stations.append({
-                "station_id":       st["station_id"],
-                "operator":         st["operator"],
-                "scenario":         st["scenario"],
-                "alert":            bool(st.get("alert", False)),
-                "cameras":          list(st["cameras"]),
-                "grippers":         dict(st["grippers"]),
-                "trackers":         dict(st["trackers"]),
-                "recording":        dict(st["recording"]),
-                "upload":           dict(st["upload"]) if st.get("upload") else None,
-                "connected":        connected,
-                "last_ts":          st["last_ts"],
-                "integrity_alerts": list(_integrity_alerts.get(st["station_id"], [])),
-                "device_faults":    list(st.get("device_faults", {}).values()),
+                "station_id":        st["station_id"],
+                "operator":          st["operator"],
+                "scenario":          st["scenario"],
+                "alert":             bool(st.get("alert", False)),
+                "cameras":           list(st["cameras"]),
+                "grippers":          dict(st["grippers"]),
+                "trackers":          dict(st["trackers"]),
+                "recording":         dict(st["recording"]),
+                "upload":            dict(st["upload"]) if st.get("upload") else None,
+                "connected":         connected,
+                "last_ts":           st["last_ts"],
+                "integrity_alerts":  list(_integrity_alerts.get(st["station_id"], [])),
+                "device_faults":     list(st.get("device_faults", {}).values()),
+                # Heartbeat fields
+                "disk_free_gb":      st.get("disk_free_gb"),
+                "disk_total_gb":     st.get("disk_total_gb"),
+                "disk_used_pct":     st.get("disk_used_pct"),
+                "sessions_count":    st.get("sessions_count"),
+                "operator_username": st.get("operator_username"),
+                "operator_firstname": st.get("operator_firstname"),
+                "operator_lastname":  st.get("operator_lastname"),
+                "operator_id":        st.get("operator_id"),
             })
 
         total = len(stations)
@@ -790,4 +853,5 @@ def get_stations_snapshot() -> dict:
             },
             "stations": stations,
             "spool":    spool,
+            "servers":  list(_server_heartbeats.values()),
         }
