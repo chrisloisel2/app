@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
+import DataView from "./DataView";
 
 // ── Couleurs de statut ────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -739,11 +740,13 @@ function LastUpdateLabel({ lastUpdateRef }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function SalleRecoltePage() {
   // Stations indexées par pc_id (int 1-30) extrait du station_id
+  const [view, setView]               = useState("salle"); // "salle" | "data"
   const [stationsMap, setStationsMap] = useState(() => new Map());
   const [meta, setMeta]               = useState({ connected: false, errors: [] });
   const [spool, setSpool]             = useState(null);
   const [loading, setLoading]         = useState(true);
   const [selectedPc, setSelectedPc]   = useState(null);
+  const [lastWsMsg, setLastWsMsg]     = useState(null);
 
   const prevMetaRef  = useRef(null);
   const lastUpdateRef = useRef(null);
@@ -754,6 +757,7 @@ export default function SalleRecoltePage() {
 
   const handleMessage = useCallback((msg) => {
     setLoading(false);
+    setLastWsMsg(msg);
 
     lastUpdateRef.current = msg.last_update;
     const metaKey = `${msg.connected}|${(msg.errors ?? []).length}`;
@@ -849,7 +853,7 @@ export default function SalleRecoltePage() {
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Legend />
+          {view === "salle" && <Legend />}
           <div style={{
             display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
             background: "rgba(34,211,238,0.06)", border: "1px solid rgba(34,211,238,0.2)", borderRadius: 6,
@@ -863,8 +867,34 @@ export default function SalleRecoltePage() {
               {meta.connected ? "KAFKA CONNECTÉ" : "KAFKA DÉCONNECTÉ"}
             </span>
           </div>
+          {/* Toggle vue */}
+          <div style={{ display: "flex", background: "rgba(15,23,42,0.9)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, overflow: "hidden" }}>
+            {["salle", "data"].map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                style={{
+                  padding: "4px 12px", fontSize: 9, fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: 1, cursor: "pointer", border: "none",
+                  background: view === v ? "rgba(99,102,241,0.25)" : "transparent",
+                  color: view === v ? "#a5b4fc" : "#4b5563",
+                  borderRight: v === "salle" ? "1px solid rgba(255,255,255,0.08)" : "none",
+                  fontFamily: "inherit",
+                  transition: "background 0.15s, color 0.15s",
+                }}
+              >
+                {v === "salle" ? "⬡ SALLE" : "◈ DATA"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Vue DATA */}
+      {view === "data" && <DataView wsData={lastWsMsg} />}
+
+      {/* Vue SALLE */}
+      {view === "salle" && <>
 
       {/* Stats rapides */}
       <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
@@ -1015,6 +1045,8 @@ export default function SalleRecoltePage() {
 
       {/* ── SPOOL ─────────────────────────────────────────────────────────── */}
       <SpoolSection spool={spool} />
+
+      </>}
     </div>
   );
 }

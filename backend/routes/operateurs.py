@@ -40,24 +40,30 @@ def list_operateurs():
 
 @operateurs_bp.route("/api/operateurs", methods=["POST"])
 def create_operateur():
-    body = request.get_json(silent=True) or {}
-    numero_poste    = body.get("numero_poste", "").strip()
-    nom_utilisateur = body.get("nom_utilisateur", "").strip()
-    mdp             = body.get("mdp", "").strip()
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        body = request.get_json(silent=True) or {}
+        numero_poste    = body.get("numero_poste", "").strip()
+        nom_utilisateur = body.get("nom_utilisateur", "").strip()
+        mdp             = body.get("mdp", "").strip()
 
-    if not numero_poste or not nom_utilisateur or not mdp:
-        return jsonify({"error": "numero_poste, nom_utilisateur et mdp sont requis"}), 400
+        if not numero_poste or not nom_utilisateur or not mdp:
+            return jsonify({"error": "numero_poste, nom_utilisateur et mdp sont requis"}), 400
 
-    col = get_col()
-    if col.find_one({"username": nom_utilisateur}):
-        return jsonify({"error": "Ce nom d'utilisateur existe déjà"}), 409
+        col = get_col()
+        if col.find_one({"username": nom_utilisateur}):
+            return jsonify({"error": "Ce nom d'utilisateur existe déjà"}), 409
 
-    result = col.insert_one({
-        "numero_poste": numero_poste,
-        "username":     nom_utilisateur,
-        "password":     mdp,
-    })
-    return jsonify({"_id": str(result.inserted_id)}), 201
+        result = col.insert_one({
+            "numero_poste": numero_poste,
+            "username":     nom_utilisateur,
+            "password":     mdp,
+        })
+        return jsonify({"_id": str(result.inserted_id)}), 201
+    except Exception:
+        log.exception("ERREUR create_operateur")
+        return jsonify({"error": "Erreur interne lors de la création"}), 500
 
 
 @operateurs_bp.route("/api/operateurs/<id>", methods=["PUT"])
