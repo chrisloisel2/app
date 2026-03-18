@@ -179,28 +179,16 @@ function PipelineBar({ total, pending, uploading, done }) {
   );
 }
 
-// ── Service pill ──────────────────────────────────────────────────────────────
-function ServicePill({ label, ok, detail }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 6,
-      padding: "5px 10px", borderRadius: 6,
-      background: ok ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
-      border: `1px solid ${ok ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
-    }}>
-      <PulseDot active={ok} color={ok ? "#22c55e" : "#ef4444"} size={7} />
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <span style={{ color: ok ? "#86efac" : "#fca5a5", fontSize: 9, fontWeight: 700, lineHeight: 1.2 }}>{label}</span>
-        {detail && <span style={{ color: "#374151", fontSize: 8, lineHeight: 1.2 }}>{detail}</span>}
-      </div>
-    </div>
-  );
-}
 
 // ── Carte serveur ─────────────────────────────────────────────────────────────
 function ServerCard({ hb, lastTsRef }) {
   const isOk = !!hb;
-  const diskWarn = (hb?.disk_inbox_used_pct ?? 0) > 85;
+  const diskWarn = (hb?.disk_used_pct ?? 0) > 85;
+
+  // Totaux queue spool
+  const qTotal = isOk
+    ? (hb.queue_pending ?? 0) + (hb.queue_processing ?? 0) + (hb.queue_done ?? 0) + (hb.queue_failed ?? 0)
+    : 0;
 
   return (
     <div style={{
@@ -224,11 +212,11 @@ function ServerCard({ hb, lastTsRef }) {
           <div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span style={{ color: "#e2e8f0", fontSize: 15, fontWeight: 700, letterSpacing: 0.5 }}>
-                {hb?.server_id ?? hb?.hostname ?? "—"}
+                {hb?.server_id ?? "—"}
               </span>
-              <span style={{ color: "#334155", fontSize: 9 }}>
-                {hb?.hostname && hb?.server_id !== hb?.hostname ? hb.hostname : ""}
-              </span>
+              {hb?.role && (
+                <span style={{ color: "#334155", fontSize: 9 }}>{hb.role}</span>
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
               <span style={{
@@ -255,38 +243,19 @@ function ServerCard({ hb, lastTsRef }) {
 
       <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-        {/* ── Services ── */}
+        {/* ── Sessions inbox + spool ── */}
         <div>
           <div style={{ color: "#1e3a5f", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>
-            SERVICES
+            SESSIONS
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <ServicePill
-              label="Kafka"
-              ok={hb?.kafka_ok ?? false}
-              detail={hb?.kafka_ok ? "connecté" : "déconnecté"}
-            />
-            <ServicePill
-              label="S3 Sync"
-              ok={hb?.s3_sync_active ?? false}
-              detail={hb?.s3_sync_active ? `${hb.s3_bucket ?? "—"}/${hb.s3_prefix ?? "—"}` : "inactif"}
-            />
-          </div>
-        </div>
-
-        {/* ── Pipeline sessions ── */}
-        <div>
-          <div style={{ color: "#1e3a5f", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>
-            PIPELINE SESSIONS · <span style={{ color: "#475569" }}>{hb?.inbox_dir ?? "—"}</span>
-          </div>
-
-          {/* Compteurs */}
           <div style={{ display: "flex", gap: 0, marginBottom: 10 }}>
             {[
-              { label: "Total",     value: hb?.inbox_sessions_count,     color: "#94a3b8", bg: "rgba(148,163,184,0.05)", br: "rgba(148,163,184,0.1)" },
-              { label: "Pending",   value: hb?.inbox_sessions_pending,   color: "#f59e0b", bg: "rgba(245,158,11,0.06)",  br: "rgba(245,158,11,0.15)" },
-              { label: "Uploading", value: hb?.inbox_sessions_uploading, color: "#22d3ee", bg: "rgba(34,211,238,0.06)", br: "rgba(34,211,238,0.15)" },
-              { label: "Done",      value: hb?.inbox_sessions_done,      color: "#22c55e", bg: "rgba(34,197,94,0.06)",  br: "rgba(34,197,94,0.15)"  },
+              { label: "Inbox",      value: hb?.sessions_inbox_count, color: "#94a3b8", bg: "rgba(148,163,184,0.05)", br: "rgba(148,163,184,0.1)" },
+              { label: "Spool",      value: hb?.sessions_spool_count, color: "#6366f1", bg: "rgba(99,102,241,0.06)",  br: "rgba(99,102,241,0.15)"  },
+              { label: "Pending",    value: hb?.queue_pending,        color: "#f59e0b", bg: "rgba(245,158,11,0.06)",  br: "rgba(245,158,11,0.15)"  },
+              { label: "En cours",   value: hb?.queue_processing,     color: "#22d3ee", bg: "rgba(34,211,238,0.06)",  br: "rgba(34,211,238,0.15)"  },
+              { label: "Done",       value: hb?.queue_done,           color: "#22c55e", bg: "rgba(34,197,94,0.06)",   br: "rgba(34,197,94,0.15)"   },
+              { label: "Failed",     value: hb?.queue_failed,         color: "#ef4444", bg: "rgba(239,68,68,0.06)",   br: "rgba(239,68,68,0.15)"   },
             ].map(({ label, value, color, bg, br }, i, arr) => (
               <div key={label} style={{
                 flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
@@ -298,7 +267,7 @@ function ServerCard({ hb, lastTsRef }) {
                 borderRight: i === arr.length - 1 ? `1px solid ${br}` : "none",
                 borderRadius: i === 0 ? "6px 0 0 6px" : i === arr.length - 1 ? "0 6px 6px 0" : 0,
               }}>
-                <span style={{ color, fontSize: 20, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+                <span style={{ color, fontSize: 16, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
                   {value ?? "—"}
                 </span>
                 <span style={{ color: "#1e293b", fontSize: 7, textTransform: "uppercase", letterSpacing: 1, marginTop: 3 }}>
@@ -308,31 +277,19 @@ function ServerCard({ hb, lastTsRef }) {
             ))}
           </div>
 
-          {/* Barre de progression */}
+          {/* Barre de progression queue */}
           <PipelineBar
-            total={hb?.inbox_sessions_count}
-            pending={hb?.inbox_sessions_pending}
-            uploading={hb?.inbox_sessions_uploading}
-            done={hb?.inbox_sessions_done}
+            total={qTotal || 1}
+            pending={hb?.queue_pending ?? 0}
+            uploading={hb?.queue_processing ?? 0}
+            done={hb?.queue_done ?? 0}
           />
-          <div style={{ display: "flex", gap: 12, marginTop: 5 }}>
-            {[
-              { color: "#22c55e", label: "Done" },
-              { color: "#22d3ee", label: "Uploading" },
-              { color: "#f59e0b", label: "Pending" },
-            ].map(({ color, label }) => (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 7, height: 7, borderRadius: 2, background: color, display: "inline-block" }} />
-                <span style={{ color: "#1e293b", fontSize: 8 }}>{label}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* ── Disque ── */}
         <div>
           <div style={{ color: "#1e3a5f", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>
-            DISQUE INBOX
+            DISQUE
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
             {/* Anneau disque */}
@@ -345,7 +302,7 @@ function ServerCard({ hb, lastTsRef }) {
                   stroke={diskWarn ? "#f59e0b" : "#22d3ee"}
                   strokeWidth={5}
                   strokeDasharray={`${2 * Math.PI * 22}`}
-                  strokeDashoffset={`${2 * Math.PI * 22 * (1 - (hb?.disk_inbox_used_pct ?? 0) / 100)}`}
+                  strokeDashoffset={`${2 * Math.PI * 22 * (1 - (hb?.disk_used_pct ?? 0) / 100)}`}
                   strokeLinecap="round"
                   style={{ transition: "stroke-dashoffset 0.6s, stroke 0.3s", filter: `drop-shadow(0 0 4px ${diskWarn ? "#f59e0b" : "#22d3ee"})` }}
                 />
@@ -355,27 +312,21 @@ function ServerCard({ hb, lastTsRef }) {
                 alignItems: "center", justifyContent: "center",
               }}>
                 <span style={{ color: diskWarn ? "#f59e0b" : "#22d3ee", fontSize: 10, fontWeight: 700, lineHeight: 1 }}>
-                  {(hb?.disk_inbox_used_pct ?? 0).toFixed(0)}%
+                  {(hb?.disk_used_pct ?? 0).toFixed(0)}%
                 </span>
               </div>
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: "#334155", fontSize: 9 }}>Utilisé</span>
-                <span style={{ color: diskWarn ? "#f59e0b" : "#94a3b8", fontSize: 9, fontWeight: 600 }}>
-                  {hb ? ((hb.disk_inbox_total_gb - hb.disk_inbox_free_gb) || 0).toFixed(1) : "—"} GB
-                </span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                 <span style={{ color: "#334155", fontSize: 9 }}>Libre</span>
                 <span style={{ color: "#22c55e", fontSize: 9, fontWeight: 600 }}>
-                  {hb?.disk_inbox_free_gb?.toFixed(1) ?? "—"} GB
+                  {hb?.disk_free_gb?.toFixed(1) ?? "—"} GB
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "#334155", fontSize: 9 }}>Total</span>
                 <span style={{ color: "#475569", fontSize: 9 }}>
-                  {hb?.disk_inbox_total_gb?.toFixed(1) ?? "—"} GB
+                  {hb?.disk_total_gb?.toFixed(1) ?? "—"} GB
                 </span>
               </div>
             </div>
@@ -407,27 +358,18 @@ export default function DataView({ wsData }) {
   useEffect(() => {
     if (!wsData) return;
 
-    // Heartbeats stations
-    const stationHbs = wsData.station_heartbeats ?? [];
+    // Heartbeats stations (clé: "stations" dans le snapshot WS)
+    const stationHbs = wsData.stations ?? wsData.station_heartbeats ?? [];
     if (stationHbs.length > 0) {
       setStations(stationHbs);
       for (const hb of stationHbs) {
         if (!stationTsRefs.current[hb.station_id]) stationTsRefs.current[hb.station_id] = { current: null };
-        stationTsRefs.current[hb.station_id].current = hb.ts;
+        stationTsRefs.current[hb.station_id].current = hb.ts ?? hb.last_ts;
       }
     }
 
-    // Heartbeat serveur unique
-    if (wsData.server_heartbeat) {
-      const hb = wsData.server_heartbeat;
-      const key = hb.server_id ?? hb.hostname ?? "server";
-      if (!serverTsRefs.current[key]) serverTsRefs.current[key] = { current: null };
-      serverTsRefs.current[key].current = hb.ts;
-      setServersMap(prev => new Map(prev).set(key, hb));
-    }
-
-    // Tableau de heartbeats serveurs
-    const serverHbs = wsData.server_heartbeats ?? [];
+    // Heartbeats serveurs (clé: "servers" dans le snapshot WS)
+    const serverHbs = wsData.servers ?? wsData.server_heartbeats ?? (wsData.server_heartbeat ? [wsData.server_heartbeat] : []);
     for (const hb of serverHbs) {
       const key = hb.server_id ?? hb.hostname ?? "server";
       if (!serverTsRefs.current[key]) serverTsRefs.current[key] = { current: null };
