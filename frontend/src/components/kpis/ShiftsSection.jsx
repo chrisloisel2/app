@@ -1,63 +1,67 @@
-import { useEffect, useState } from "react";
-import { fetchKpiShifts } from "../../api/client";
+import { useEffect, useState, useCallback } from "react";
+import { fetchKafkaKpisLive } from "../../api/client";
 import KpiCard from "../ui/KpiCard";
-import KpiTable from "../ui/KpiTable";
-import KpiBarChart from "../ui/KpiBarChart";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import ErrorBanner from "../ui/ErrorBanner";
 
-const COLS = [
-  { key: "shift",                    label: "Shift" },
-  { key: "session_count",            label: "Sessions" },
-  { key: "raw_hours",                label: "Raw h" },
-  { key: "accepted_hours",           label: "Accepted h" },
-  { key: "acceptance_rate_pct",      label: "Acc. %",        type: "pct" },
-  { key: "throughput_h_per_day",     label: "Throughput h/j" },
-  { key: "rework_hours",             label: "Rework h" },
-  { key: "rework_pct",               label: "Rework %",      type: "pct" },
-  { key: "defect_rate_pct",          label: "Defect %",      type: "pct" },
-  { key: "upload_success_rate_pct",  label: "Upload %",      type: "pct" },
-  { key: "data_loss_rate_pct",       label: "Data Loss %",   type: "pct" },
-  { key: "dataset_completeness_pct", label: "Dataset %",     type: "pct" },
-  { key: "setup_time_avg_min",       label: "Setup (min)" },
-  { key: "rework_cost_eur",          label: "Rework €",      type: "eur" },
-];
+const REFRESH_MS = 5000;
 
-const SHIFT_COLORS = { morning: "#f59e0b", afternoon: "#3b82f6", night: "#6366f1" };
+function fmt(v, dec = 1) {
+  if (v == null) return null;
+  return typeof v === "number" ? +v.toFixed(dec) : v;
+}
 
 export default function ShiftsSection() {
-  const [rows, setRows]     = useState([]);
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
-  useEffect(() => {
-    fetchKpiShifts().then(r => setRows(r.data.shifts || [])).catch(e => setError(e.message)).finally(() => setLoading(false));
+  const [error, setError]     = useState(null);
+
+  const load = useCallback(() => {
+    fetchKafkaKpisLive()
+      .then((r) => { setData(r.data); setError(null); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, REFRESH_MS);
+    return () => clearInterval(id);
+  }, [load]);
+
   if (loading) return <LoadingSpinner />;
   if (error)   return <ErrorBanner message={error} />;
 
+  const rec = data?.recording || {};
+  const upl = data?.upload    || {};
+  const dev = data?.device_faults || {};
+
+  const totalDuration = rec.total_duration_s ?? 0;
+  const totalDurationH = fmt(totalDuration / 3600, 2);
+
   return (
-    <div className="space-y-5">
-      {/* One card per shift */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {rows.map(r => (
-          <div key={r.shift} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-2">
-            <p className="text-xs uppercase tracking-wide text-gray-400 font-medium">{r.shift}</p>
-            <p className="text-2xl font-bold text-gray-900">{r.accepted_hours ?? "—"} <span className="text-sm text-gray-400">h accepted</span></p>
-            <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
-              <span>Acc. Rate: <strong>{r.acceptance_rate_pct ?? "—"}%</strong></span>
-              <span>Rework: <strong>{r.rework_pct ?? "—"}%</strong></span>
-              <span>Sessions: <strong>{r.session_count}</strong></span>
-              <span>Rework €: <strong>{r.rework_cost_eur ?? "—"}</strong></span>
-            </div>
-          </div>
-        ))}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Session — résumé du jour</h2>
+        <span className="inline-flex items-center gap-1.5 text-xs text-green-600">
+          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />Live · {data?.date}
+        </span>
       </div>
-      <KpiBarChart
-        title="Throughput par shift (h/jour)"
-        data={rows} xKey="shift"
-        bars={[{ key: "throughput_h_per_day", label: "h/jour", color: "#3b82f6" }]}
-      />
-      <KpiTable columns={COLS} rows={rows} />
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <KpiCard label="Sessions démarrées"      value={rec.started_today}               color="blue" />
+        <KpiCard label="Sessions arrêtées"       value={rec.stopped_today}               color="green" />
+        <KpiCard label="Sessions en cours"       value={rec.active_now}                  color={rec.active_now > 0 ? "blue" : "default"} />
+        <KpiCard label="Sessions échouées"       value={rec.failed_today}                color={rec.failed_today > 0 ? "red" : "green"} />
+        <KpiCard label="Durée totale capturée"   value={totalDurationH}     unit="h"     color="blue" />
+        <KpiCard label="Durée moyenne"           value={fmt(rec.avg_duration_s, 0)} unit="s" />
+        <KpiCard label="Taux d'échec"            value={fmt(rec.fail_rate_pct, 1)}  unit="%" color={(rec.fail_rate_pct ?? 0) > 10 ? "red" : "green"} />
+        <KpiCard label="Uploads complétés"       value={upl.completed_total}             color="green" />
+        <KpiCard label="Uploads échoués"         value={upl.failed_total}               color={upl.failed_total > 0 ? "red" : "green"} />
+        <KpiCard label="Taux succès upload"      value={fmt(upl.success_rate_pct, 1)} unit="%" color={(upl.success_rate_pct ?? 100) >= 95 ? "green" : "red"} />
+        <KpiCard label="Durée moy. upload"       value={fmt(upl.avg_elapsed_s, 0)}  unit="s" />
+        <KpiCard label="Pannes actives"          value={dev.active_count}               color={dev.active_count > 0 ? "red" : "green"} />
+      </div>
     </div>
   );
 }

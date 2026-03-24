@@ -100,28 +100,6 @@ export default function Sidebar() {
           {[
             { to: "/salle-recolte",  label: "Salle de récolte", icon: "⬡" },
             { to: "/orchestrateur",  label: "Orchestrateur",    icon: "◎" },
-            { to: "/kafka-logs",     label: "Kafka Logs",       icon: "⬡" },
-            { to: "/ssh-parc",       label: "SSH Worm",         icon: "⌨" },
-          ].map(({ to, label, icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              title={label}
-              className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mt-0.5`}
-            >
-              <span className="shrink-0 text-base">{icon}</span>
-              {expanded && <span className="whitespace-nowrap">{label}</span>}
-            </NavLink>
-          ))}
-        </div>
-
-        {/* DATA EXPLORER */}
-        <div>
-          {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Data Explorer</p>}
-          {[
-            { to: "/sessions",          label: "Sessions",      icon: "◧" },
-            { to: "/sessions-metadata", label: "Metadata",      icon: "◩" },
-            { to: "/query",             label: "Query Console", icon: "⟡" },
           ].map(({ to, label, icon }) => (
             <NavLink
               key={to}

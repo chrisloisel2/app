@@ -1,49 +1,59 @@
-import { useEffect, useState } from "react";
-import { fetchKpiStaffing } from "../../api/client";
+import { useEffect, useState, useCallback } from "react";
+import { fetchKafkaKpisLive } from "../../api/client";
 import KpiCard from "../ui/KpiCard";
-import KpiTable from "../ui/KpiTable";
-import KpiBarChart from "../ui/KpiBarChart";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import ErrorBanner from "../ui/ErrorBanner";
 
-const COLS = [
-  { key: "date",                  label: "Date" },
-  { key: "shift",                 label: "Shift" },
-  { key: "operators_scheduled",   label: "Prévus" },
-  { key: "operators_present",     label: "Présents" },
-  { key: "attendance_rate_pct",   label: "Présence %", type: "pct" },
-  { key: "effective_hours",       label: "Eff. h" },
-];
+const REFRESH_MS = 5000;
 
 export default function StaffingSection() {
-  const [data, setData]     = useState({});
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
-  useEffect(() => {
-    fetchKpiStaffing().then(r => setData(r.data)).catch(e => setError(e.message)).finally(() => setLoading(false));
+  const [error, setError]     = useState(null);
+
+  const load = useCallback(() => {
+    fetchKafkaKpisLive()
+      .then((r) => { setData(r.data); setError(null); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, REFRESH_MS);
+    return () => clearInterval(id);
+  }, [load]);
+
   if (loading) return <LoadingSpinner />;
   if (error)   return <ErrorBanner message={error} />;
-  const g = data.global || {};
-  const byShift = data.by_shift || [];
+
+  const sta    = data?.stations     || {};
+  const rec    = data?.recording    || {};
+  const counts = data?.event_counts || {};
+
+  const presenceRate = sta.total_seen > 0
+    ? Math.round((sta.with_operator_now / sta.total_seen) * 100)
+    : null;
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiCard label="Taux de présence"    value={g.attendance_rate_pct}   unit="%" color={g.attendance_rate_pct >= 90 ? "green" : "amber"} />
-        <KpiCard label="Heures effectives"   value={g.effective_hours_total} unit="h" />
-        <KpiCard label="Turnover %"          value={g.turnover_pct}          unit="%" color={g.turnover_pct > 20 ? "red" : "amber"} />
-        <KpiCard label="Heures formation"    value={g.training_hours_total}  unit="h" />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Présences — vue live</h2>
+        <span className="inline-flex items-center gap-1.5 text-xs text-green-600">
+          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />Live
+        </span>
       </div>
-      <KpiBarChart
-        title="Prévus vs Présents par shift/jour"
-        data={byShift} xKey="shift"
-        bars={[
-          { key: "operators_scheduled", label: "Prévus",   color: "#93c5fd" },
-          { key: "operators_present",   label: "Présents", color: "#3b82f6" },
-        ]}
-      />
-      <KpiTable columns={COLS} rows={byShift} />
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <KpiCard label="Stations totales vues"   value={sta.total_seen} />
+        <KpiCard label="Stations connectées"     value={sta.connected_now}       color="green" />
+        <KpiCard label="Avec opérateur"          value={sta.with_operator_now}   color="blue" />
+        <KpiCard label="Taux de présence"        value={presenceRate != null ? `${presenceRate}%` : null} color={(presenceRate ?? 0) >= 70 ? "green" : "amber"} />
+        <KpiCard label="Stations en alerte"      value={sta.with_alert_now}      color={sta.with_alert_now > 0 ? "red" : "green"} />
+        <KpiCard label="Sessions en cours"       value={rec.active_now}          color={rec.active_now > 0 ? "blue" : "default"} />
+        <KpiCard label="Sessions démarrées auj." value={rec.started_today}       color="blue" />
+        <KpiCard label="Connexions totales"      value={counts.operator_connected ?? 0} sub="depuis démarrage" />
+      </div>
     </div>
   );
 }

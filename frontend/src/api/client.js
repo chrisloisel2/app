@@ -36,24 +36,10 @@ export const createScenario  = (body)     => api.post("/api/scenarios", body);
 export const updateScenario  = (id, body) => api.put(`/api/scenarios/${id}`, body);
 export const deleteScenario  = (id)       => api.delete(`/api/scenarios/${id}`);
 
-// ── SSH Parc ──────────────────────────────────────────────────────────────────
-export const fetchSshParc   = ()    => api.get("/api/ssh-parc");
-export const deleteSshEntry = (id)  => api.delete(`/api/ssh-parc/${id}`);
-export const clearSshParc   = ()    => api.delete("/api/ssh-parc");
-// exec utilise fetch natif (SSE streaming) — pas axios
-
-// ── KPIs ──────────────────────────────────────────────────────────────────────
-export const fetchKpiOverview      = ()            => api.get("/api/kpis/overview");
-export const fetchKpiDaily         = (days = 30)   => api.get("/api/kpis/daily", { params: { days } });
-export const fetchKpiOperators     = ()            => api.get("/api/kpis/operators");
-export const fetchKpiRigs          = ()            => api.get("/api/kpis/rigs");
-export const fetchKpiShifts        = ()            => api.get("/api/kpis/shifts");
-export const fetchKpiAnnotation    = ()            => api.get("/api/kpis/annotation");
-export const fetchKpiStaffing      = ()            => api.get("/api/kpis/staffing");
-export const fetchKpiIncidents     = ()            => api.get("/api/kpis/incidents");
-export const fetchKpiDataIntegrity = ()            => api.get("/api/kpis/data-integrity");
-export const fetchKpiFinance       = ()            => api.get("/api/kpis/finance");
-export const fetchKpiProduction    = ()            => api.get("/api/kpis/production");
+// ── KPIs temps réel (Kafka) ────────────────────────────────────────────────────
+export const fetchKafkaKpisLive    = ()                      => api.get("/api/kafka-kpis/live");
+export const fetchKafkaKpisHistory = (hours = 24, limit = 100) =>
+  api.get("/api/kafka-kpis/history", { params: { hours, limit } });
 
 // ── Operators (physical_data) ─────────────────────────────────────────────────
 export const fetchOperators  = (params)     => api.get("/api/operators", { params });

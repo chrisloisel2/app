@@ -2,17 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import KPIsPage from "./pages/KPIsPage";
-import SessionsPage from "./pages/SessionsPage";
-import SessionDetailPage from "./pages/SessionDetailPage";
-import QueryPage from "./pages/QueryPage";
-import SessionsMetadataPage from "./pages/SessionsMetadataPage";
 import SalleRecoltePage from "./pages/SalleRecoltePage";
 import OrchestrateurPage from "./pages/OrchestrateurPage";
 import OperateursPage from "./pages/OperateursPage";
 import AnnotateursPage from "./pages/AnnotateursPage";
 import ScenariosPage from "./pages/ScenariosPage";
-import KafkaLogsPage from "./pages/KafkaLogsPage";
-import SshParcPage from "./pages/SshParcPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import RigsPage from "./pages/RigsPage";
 import ShiftCalendarPage from "./pages/ShiftCalendarPage";
@@ -40,14 +34,8 @@ export default function App() {
               <Route path="/"                       element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"              element={<DashboardPage />} />
               <Route path="/kpis/:section"          element={<KPIsPage />} />
-              <Route path="/sessions"               element={<SessionsPage />} />
-              <Route path="/sessions-metadata"      element={<SessionsMetadataPage />} />
-              <Route path="/sessions/:id"           element={<SessionDetailPage />} />
-              <Route path="/query"                  element={<QueryPage />} />
               <Route path="/salle-recolte"          element={<SalleRecoltePage />} />
               <Route path="/orchestrateur"          element={<OrchestrateurPage />} />
-              <Route path="/kafka-logs"             element={<KafkaLogsPage />} />
-              <Route path="/ssh-parc"               element={<SshParcPage />} />
               {/* Administration legacy */}
               <Route path="/operateurs"             element={<OperateursPage />} />
               <Route path="/annotateurs"            element={<AnnotateursPage />} />
