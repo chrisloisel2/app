@@ -243,6 +243,13 @@ except Exception:
     logger.critical("FAILED to import kafka_kpi_engine:\n%s", traceback.format_exc())
     sys.exit(1)
 
+try:
+    from routes.session_stats import session_stats_bp
+    logger.info("routes.session_stats imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.session_stats:\n%s", traceback.format_exc())
+    sys.exit(1)
+
 
 try:
     from flask_sock import Sock
@@ -299,6 +306,7 @@ app.register_blueprint(cost_events_bp)
 app.register_blueprint(rig_status_snapshots_bp)
 app.register_blueprint(kpi_aggregates_bp)
 app.register_blueprint(kafka_kpis_bp)
+app.register_blueprint(session_stats_bp)
 
 from routes.salle import register_ws_route
 register_ws_route(sock)

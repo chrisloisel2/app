@@ -22,6 +22,7 @@ import RigStatusSnapshotsPage from "./pages/RigStatusSnapshotsPage";
 import KpiAggregatesPage from "./pages/KpiAggregatesPage";
 import PlanningPage from "./pages/PlanningPage";
 import OperatorsPage from "./pages/OperatorsPage";
+import SessionChartsPage from "./pages/SessionChartsPage";
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
               <Route path="/kpi-aggregates"         element={<KpiAggregatesPage />} />
               <Route path="/planning"               element={<PlanningPage />} />
               <Route path="/operators"              element={<OperatorsPage />} />
+              <Route path="/session-charts"         element={<SessionChartsPage />} />
             </Routes>
           </main>
         </div>

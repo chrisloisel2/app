@@ -36,6 +36,12 @@ export const createScenario  = (body)     => api.post("/api/scenarios", body);
 export const updateScenario  = (id, body) => api.put(`/api/scenarios/${id}`, body);
 export const deleteScenario  = (id)       => api.delete(`/api/scenarios/${id}`);
 
+// ── Session Stats ─────────────────────────────────────────────────────────────
+export const ingestSession      = (body)         => api.post("/api/session-stats", body);
+export const ingestSessionBatch = (sessions)     => api.post("/api/session-stats/batch", sessions);
+export const fetchSessionStats  = (params)       => api.get("/api/session-stats", { params });
+export const fetchSessionCharts = (params)       => api.get("/api/session-stats/charts", { params });
+
 // ── KPIs temps réel (Kafka) ────────────────────────────────────────────────────
 export const fetchKafkaKpisLive    = ()                      => api.get("/api/kafka-kpis/live");
 export const fetchKafkaKpisHistory = (hours = 24, limit = 100) =>

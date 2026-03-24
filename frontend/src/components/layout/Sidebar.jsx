@@ -58,6 +58,14 @@ export default function Sidebar() {
         <div>
           {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Production</p>}
           <NavLink
+            to="/session-charts"
+            title="Sessions"
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mb-0.5`}
+          >
+            <span className="shrink-0 text-base">◫</span>
+            {expanded && <span className="whitespace-nowrap">Sessions</span>}
+          </NavLink>
+          <NavLink
             to="/dashboard"
             title="Dashboard"
             className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive}`}
