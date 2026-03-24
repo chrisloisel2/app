@@ -1,22 +1,28 @@
 """
-Kafka consumer for monitoring (KAFKA_SALLE_TOPIC).
+Kafka consumer — nouvelle architecture multi-topics.
 
-KafkaEventPublisher — messages plats (tous les champs au niveau racine) :
+Topics écoutés (KafkaEventPublisher) :
+  salle.station.events    → operator_connected, app_closed, station_disconnected,
+                            station_alert, gripper_connected, gripper_disconnected,
+                            gripper_switch_on, gripper_switch_off
+  salle.recording.events  → recording_started, recording_stopped, session_failed
+  salle.upload.events     → upload_queued, upload_started, upload_completed,
+                            upload_failed, session_integrity_error
+  salle.device.events     → device_fault
+  salle.tracker.events    → tracker_connected, tracker_disconnected, tracker_lost,
+                            tracker_recovered, tracker_low_battery, tracker_critical_battery
+  salle.inventory.events  → cameras_detected
+
+Topic legacy (SalleReporter / spool / heartbeat) :
+  monitoring              → source == 'pc' | 'spool_status' | 'inspect_session' |
+                            'spool_daemon' | 'server_heartbeat' | 'station_heartbeat'
+
+Format commun KafkaEventPublisher (JSON plat) :
   {
     "type": "<event_type>", "station_id": "PC-03", "ts": 1741234567.123,
     "operator": "alice", "scenario": "scenario-A",
     ... champs spécifiques à l'événement ...
   }
-
-Types d'événements :
-  operator_connected, app_closed, station_disconnected, station_alert,
-  cameras_detected,
-  gripper_connected, gripper_disconnected, gripper_switch_on, gripper_switch_off,
-  session_failed,
-  tracker_connected, tracker_disconnected, tracker_lost,
-  tracker_recovered, tracker_low_battery, tracker_critical_battery,
-  recording_started, recording_stopped,
-  upload_queued, upload_started, upload_completed, upload_failed
 """
 
 import json
@@ -93,6 +99,12 @@ _server_heartbeats: dict = {}
 def _get_bootstrap_server():
     from config import KAFKA_BROKER, KAFKA_BROKER_PORT
     return f"{KAFKA_BROKER}:{KAFKA_BROKER_PORT}"
+
+
+def _get_topics():
+    from config import KAFKA_TOPICS, KAFKA_TOPIC
+    # Nouveaux topics domaine + topic legacy pour SalleReporter/spool/heartbeat
+    return list(KAFKA_TOPICS) + [KAFKA_TOPIC]
 
 
 def _notify_ws():
@@ -441,6 +453,14 @@ def _handle_event(msg: dict) -> bool:
         return False
 
     _stations[station_id] = st
+
+    # Feed real-time KPI accumulator
+    try:
+        import kafka_kpi_engine
+        kafka_kpi_engine.on_event(msg)
+    except Exception:
+        pass
+
     return True
 
 
@@ -600,17 +620,17 @@ def get_spool_snapshot() -> dict:
 
 # ── Message dispatcher ────────────────────────────────────────────────────────
 
-def _process_message(raw_value: bytes):
+def _process_message(raw_value: bytes, topic: str = "monitoring"):
     try:
         msg = json.loads(raw_value.decode("utf-8"))
     except Exception as e:
-        logger.warning("Kafka monitoring: invalid JSON — %s", e)
+        logger.warning("Kafka %s: invalid JSON — %s", topic, e)
         return
 
     # Broadcast raw message to log viewers
     try:
         from routes.kafka_logs import broadcast
-        broadcast("monitoring", msg)
+        broadcast(topic, msg)
     except Exception:
         pass
 
@@ -620,7 +640,22 @@ def _process_message(raw_value: bytes):
     with _state_lock:
         _state["last_update"] = now
 
-        if "source" in msg and msg["source"] == "pc":
+        # ── Nouveaux topics domaine → KafkaEventPublisher ──────────────────────
+        if topic in (
+            "salle.station.events",
+            "salle.recording.events",
+            "salle.upload.events",
+            "salle.device.events",
+            "salle.tracker.events",
+            "salle.inventory.events",
+        ):
+            if "type" in msg:
+                should_notify = _handle_event(msg)
+            else:
+                logger.debug("Kafka %s: message sans champ 'type'", topic)
+
+        # ── Topic legacy monitoring → discriminant par 'source' ────────────────
+        elif "source" in msg and msg["source"] == "pc":
             # SalleReporter — état upload poste
             should_notify = _handle_salle_reporter(msg, now)
         elif "source" in msg and msg["source"] == "spool_status":
@@ -665,10 +700,10 @@ def _process_message(raw_value: bytes):
             }
             should_notify = True
         elif "type" in msg:
-            # KafkaEventPublisher — événement cycle de vie
+            # KafkaEventPublisher sur topic legacy — événement cycle de vie
             should_notify = _handle_event(msg)
         else:
-            logger.debug("Kafka monitoring: message sans discriminant reconnu")
+            logger.debug("Kafka %s: message sans discriminant reconnu", topic)
 
     if should_notify:
         _notify_ws()
@@ -678,13 +713,14 @@ def _process_message(raw_value: bytes):
 
 def _consumer_loop():
     bootstrap = _get_bootstrap_server()
-    logger.info("Kafka consumer monitoring: connecting to %s", bootstrap)
+    topics = _get_topics()
+    logger.info("Kafka consumer: connecting to %s, topics: %s", bootstrap, topics)
 
     while True:
         try:
             from kafka import KafkaConsumer
             consumer = KafkaConsumer(
-                "monitoring",
+                *topics,
                 bootstrap_servers=[bootstrap],
                 auto_offset_reset="latest",
                 enable_auto_commit=True,
@@ -694,7 +730,7 @@ def _consumer_loop():
             with _state_lock:
                 _state["connected"] = True
                 _state["errors"] = []
-            logger.info("Kafka consumer monitoring: connected")
+            logger.info("Kafka consumer: connected, listening on %s", topics)
             try:
                 from routes.kafka_logs import broadcast_status
                 broadcast_status(True)
@@ -702,11 +738,11 @@ def _consumer_loop():
                 pass
 
             for message in consumer:
-                _process_message(message.value)
+                _process_message(message.value, topic=message.topic)
 
         except Exception as e:
             err_msg = str(e)
-            logger.error("Kafka consumer monitoring error: %s", err_msg)
+            logger.error("Kafka consumer error: %s", err_msg)
             with _state_lock:
                 _state["connected"] = False
                 _state["errors"].append({

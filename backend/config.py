@@ -11,7 +11,19 @@ NAS_PASS         = os.environ.get("NAS_PASS", "")
 # Kafka (external broker)
 KAFKA_BROKER      = os.environ.get("KAFKA_BROKER", "192.168.88.4")
 KAFKA_BROKER_PORT = int(os.environ.get("KAFKA_BROKER_PORT", "9092"))
-KAFKA_TOPIC       = os.environ.get("KAFKA_TOPIC", "monitoring")
+
+# Legacy single-topic (kept for backward compat with other consumers)
+KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "monitoring")
+
+# Multi-topic routing (new architecture)
+KAFKA_TOPICS = [
+    "salle.station.events",
+    "salle.recording.events",
+    "salle.upload.events",
+    "salle.device.events",
+    "salle.tracker.events",
+    "salle.inventory.events",
+]
 
 # MongoDB (external instance)
 MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://admin:admin123@192.168.88.17:27017/")

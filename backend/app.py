@@ -229,6 +229,20 @@ except Exception:
     logger.critical("FAILED to import kafka_consumer:\n%s", traceback.format_exc())
     sys.exit(1)
 
+try:
+    from routes.kafka_kpis import kafka_kpis_bp
+    logger.info("routes.kafka_kpis imported OK")
+except Exception:
+    logger.critical("FAILED to import routes.kafka_kpis:\n%s", traceback.format_exc())
+    sys.exit(1)
+
+try:
+    from kafka_kpi_engine import start_flush_thread
+    logger.info("kafka_kpi_engine imported OK")
+except Exception:
+    logger.critical("FAILED to import kafka_kpi_engine:\n%s", traceback.format_exc())
+    sys.exit(1)
+
 
 try:
     from flask_sock import Sock
@@ -284,6 +298,7 @@ app.register_blueprint(delivery_tracking_bp)
 app.register_blueprint(cost_events_bp)
 app.register_blueprint(rig_status_snapshots_bp)
 app.register_blueprint(kpi_aggregates_bp)
+app.register_blueprint(kafka_kpis_bp)
 
 from routes.salle import register_ws_route
 register_ws_route(sock)
@@ -293,6 +308,9 @@ logger.info("=== Blueprints registered — app ready ===")
 
 # Start Kafka consumer background thread (monitoring — SalleReporter + KafkaEventPublisher)
 start_consumer()
+
+# Start Kafka KPI periodic Mongo flush thread
+start_flush_thread()
 
 
 @app.before_request
