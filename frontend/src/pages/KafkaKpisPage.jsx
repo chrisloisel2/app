@@ -1,10 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  fetchKafkaKpisLive,
   fetchKafkaOperators,
   fetchKafkaOperatorDetail,
   fetchKafkaOperatorsDb,
-  fetchKafkaSessionsPending,
 } from "../api/client";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -35,18 +33,40 @@ function Card({ title, children }) {
 
 // ── Onglet Aperçu ─────────────────────────────────────────────────────────────
 function AperçuTab() {
-  const [snap, setSnap]     = useState(null);
+  const [snap, setSnap]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+  const [error, setError]     = useState(null);
+  const wsRef = useRef(null);
 
-  const load = useCallback(() => {
-    fetchKafkaKpisLive()
-      .then((r) => { setSnap(r.data); setError(null); })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+  useEffect(() => {
+    let reconnectTimer = null;
+
+    function connect() {
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${window.location.host}/api/kafka-kpis/ws`);
+      wsRef.current = ws;
+
+      ws.onmessage = (e) => {
+        try {
+          setSnap(JSON.parse(e.data));
+          setLoading(false);
+          setError(null);
+        } catch (_) {}
+      };
+
+      ws.onerror = () => setError("WebSocket erreur");
+
+      ws.onclose = () => {
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+    return () => {
+      clearTimeout(reconnectTimer);
+      if (wsRef.current) wsRef.current.close();
+    };
   }, []);
-
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
   if (loading) return <LoadingSpinner />;
   if (error)   return <ErrorBanner message={error} />;
@@ -81,7 +101,8 @@ function AperçuTab() {
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Sessions</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <KpiCard label="Vues au total"     value={ses.total_seen}      />
+          <KpiCard label="Total all-time"    value={ses.total_all_time ?? ses.total_seen} color="blue" />
+          <KpiCard label="Session courante"  value={ses.total_seen}      />
           <KpiCard label="En attente upload" value={ses.pending_upload}  color={ses.pending_upload > 0 ? "amber" : "green"} />
           <KpiCard label="Uploadées"         value={ses.uploaded}        color="green" />
           <KpiCard label="Heures totales"    value={fmt(ses.total_duration_h, 2)} unit="h" color="blue" />
@@ -406,15 +427,53 @@ function PendingTab() {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
+  const wsRef = useRef(null);
+  const fetchPendingRef = useRef(null);
 
-  const load = useCallback(() => {
-    fetchKafkaSessionsPending()
-      .then((r) => { setData(r.data); setError(null); })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+  const fetchPending = useCallback(() => {
+    fetch("/api/kafka-kpis/sessions/pending")
+      .then((r) => r.json())
+      .then((d) => { setData(d); setLoading(false); setError(null); })
+      .catch((e) => setError(e.message));
   }, []);
 
-  useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, [load]);
+  useEffect(() => {
+    fetchPendingRef.current = fetchPending;
+  }, [fetchPending]);
+
+  useEffect(() => {
+    let reconnectTimer = null;
+    let throttleTimer = null;
+
+    fetchPending();
+
+    function connect() {
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${window.location.host}/api/kafka-kpis/ws`);
+      wsRef.current = ws;
+
+      ws.onmessage = () => {
+        // Throttle: re-fetch pending list max 1x/s
+        if (!throttleTimer) {
+          throttleTimer = setTimeout(() => {
+            fetchPendingRef.current?.();
+            throttleTimer = null;
+          }, 1000);
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+    return () => {
+      clearTimeout(reconnectTimer);
+      clearTimeout(throttleTimer);
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [fetchPending]);
 
   if (loading) return <LoadingSpinner />;
   if (error)   return <ErrorBanner message={error} />;

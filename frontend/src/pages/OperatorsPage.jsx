@@ -94,6 +94,11 @@ export default function OperatorsPage() {
       const payload = { ...form };
       // Don't send empty password on edit
       if (editTarget && !payload.password) delete payload.password;
+      // Coerce hourly_cost to number (input returns string)
+      if (payload.cost_profile) {
+        const hc = parseFloat(payload.cost_profile.hourly_cost);
+        payload.cost_profile = { ...payload.cost_profile, hourly_cost: isNaN(hc) ? null : hc };
+      }
       if (editTarget) { await updateOperator(editTarget._id, payload); }
       else { await createOperator(payload); }
       setModalOpen(false); load();

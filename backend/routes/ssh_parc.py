@@ -4,9 +4,9 @@ Collection MongoDB : orchestrator_ssh
 """
 
 from flask import Blueprint, jsonify, request, Response, stream_with_context
-from pymongo import MongoClient, DESCENDING
+from pymongo import DESCENDING
 from bson import ObjectId
-from config import MONGODB_URI
+from db import get_col as _db_col
 import datetime
 import json
 import re
@@ -130,8 +130,7 @@ def clean_pty_output(raw: str, original_cmd: str, translated_cmd: str) -> str:
 
 
 def get_col():
-    client = MongoClient(MONGODB_URI)
-    return client["physical_data"]["orchestrator_ssh"]
+    return _db_col("physical_data", "orchestrator_ssh")
 
 
 @ssh_parc_bp.get("/api/ssh-parc")

@@ -3,17 +3,14 @@ from datetime import datetime, timezone
 
 from bson.errors import InvalidId
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from config import MONGODB_URI
 
 logger = logging.getLogger(__name__)
 projects_bp = Blueprint("projects", __name__)
 
 DB_NAME = "physical_data"
-_mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-_col = _mongo[DB_NAME]["projects"]
+_col = _mongo_client["physical_data"]["projects"]
 
 
 def _now():

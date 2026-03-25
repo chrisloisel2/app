@@ -2,17 +2,14 @@ import logging
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
-from config import MONGODB_URI
 
 logger = logging.getLogger(__name__)
 rig_status_snapshots_bp = Blueprint("rig_status_snapshots", __name__)
 
 DB_NAME = "physical_data"
-_mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-_col = _mongo[DB_NAME]["rig_status_snapshots"]
+_col = _mongo_client["physical_data"]["rig_status_snapshots"]
 
 STATUSES = ("running", "stopped", "maintenance", "idle")
 

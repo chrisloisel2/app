@@ -1,12 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
-import { fetchKafkaKpisLive } from "../api/client";
+import { useEffect, useState, useRef } from "react";
 import KpiCard from "../components/ui/KpiCard";
 import KpiLineChart from "../components/ui/KpiLineChart";
 import KpiBarChart from "../components/ui/KpiBarChart";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ErrorBanner from "../components/ui/ErrorBanner";
-
-const REFRESH_MS = 5000;
 
 function fmt(v, dec = 1) {
   if (v == null) return null;
@@ -14,34 +11,54 @@ function fmt(v, dec = 1) {
 }
 
 export default function DashboardPage() {
-  const [data, setData]     = useState(null);
+  const [data, setData]       = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
-  const [lastTs, setLastTs] = useState(null);
-
-  const load = useCallback(() => {
-    fetchKafkaKpisLive()
-      .then((r) => {
-        const d = r.data;
-        setData(d);
-        setLastTs(new Date().toLocaleTimeString());
-        setError(null);
-        // Append snapshot to local history for sparklines (max 60 points)
-        setHistory((prev) => {
-          const next = [...prev, { ...d, _label: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) }];
-          return next.slice(-60);
-        });
-      })
-      .catch((e) => setError(e.response?.data?.error || e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const [error, setError]     = useState(null);
+  const [wsStatus, setWsStatus] = useState("connecting");
+  const [lastTs, setLastTs]   = useState(null);
+  const wsRef = useRef(null);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, REFRESH_MS);
-    return () => clearInterval(id);
-  }, [load]);
+    let reconnectTimer = null;
+
+    function connect() {
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${window.location.host}/api/kafka-kpis/ws`);
+      wsRef.current = ws;
+
+      ws.onopen = () => setWsStatus("connected");
+
+      ws.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          setData(d);
+          setLoading(false);
+          setError(null);
+          const label = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          setLastTs(label);
+          setHistory((prev) => {
+            const next = [...prev, { ...d, _label: label }];
+            return next.slice(-60);
+          });
+        } catch (_) {}
+      };
+
+      ws.onerror = () => setWsStatus("error");
+
+      ws.onclose = () => {
+        setWsStatus("reconnecting");
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, []);
 
   if (loading) return <LoadingSpinner text="Chargement du dashboard…" />;
   if (error)   return <div className="p-6"><ErrorBanner message={error} /></div>;
@@ -92,11 +109,12 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Physical Data — Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Données temps réel · Kafka · mise à jour toutes les {REFRESH_MS / 1000}s</p>
+          <p className="text-sm text-gray-400 mt-0.5">Données temps réel · Kafka · WebSocket push</p>
         </div>
-        <span className="inline-flex items-center gap-1.5 text-xs text-green-600 font-medium">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          Live{lastTs && ` · ${lastTs}`}
+        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${wsStatus === "connected" ? "text-green-600" : "text-amber-500"}`}>
+          <span className={`w-2 h-2 rounded-full ${wsStatus === "connected" ? "bg-green-500 animate-pulse" : "bg-amber-400 animate-ping"}`} />
+          {wsStatus === "connected" ? "Live" : wsStatus === "reconnecting" ? "Reconnexion…" : "WS"}
+          {lastTs && ` · ${lastTs}`}
         </span>
       </div>
 

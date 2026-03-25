@@ -1,27 +1,22 @@
-import os
 import logging
 from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from db import mongo as _mongo_client
 
 logger = logging.getLogger(__name__)
 
 scenarios_bp = Blueprint("scenarios", __name__)
 
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://admin:admin123@192.168.88.17:27017/")
-DB_NAME     = os.getenv("DB_NAME", "physical_data")
-
-_mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-_db    = _mongo[DB_NAME]
-_col   = _db["scenarios"]
+DB_NAME = "physical_data"
+_col    = _mongo_client[DB_NAME]["scenarios"]
 
 # Supprimer le JSON Schema validator hérité (schéma incompatible avec notre modèle)
 try:
-    _db.command("collMod", "scenarios", validator={}, validationLevel="off")
+    _mongo_client[DB_NAME].command("collMod", "scenarios", validator={}, validationLevel="off")
     logger.info("JSON Schema validator supprimé sur la collection scenarios")
 except Exception:
     logger.debug("collMod scenarios: pas de validator à supprimer ou droits insuffisants")

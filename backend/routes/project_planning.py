@@ -2,17 +2,14 @@ import logging
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from config import MONGODB_URI
 
 logger = logging.getLogger(__name__)
 project_planning_bp = Blueprint("project_planning", __name__)
 
 DB_NAME = "physical_data"
-_mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-_col = _mongo[DB_NAME]["project_planning"]
+_col = _mongo_client["physical_data"]["project_planning"]
 
 
 def _ser(doc):

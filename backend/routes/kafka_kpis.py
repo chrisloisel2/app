@@ -3,26 +3,47 @@ kafka_kpis.py
 =============
 Routes API pour les KPIs temps réel calculés depuis les événements Kafka.
 
-GET /api/kafka-kpis/live            — snapshot global instantané
-GET /api/kafka-kpis/sessions        — toutes les sessions vues (in-memory)
-GET /api/kafka-kpis/sessions/pending — sessions non encore uploadées
-GET /api/kafka-kpis/operators       — stats complètes par opérateur (in-memory)
-GET /api/kafka-kpis/operators/<op>  — stats d'un opérateur spécifique
-GET /api/kafka-kpis/operators/db    — stats opérateurs depuis MongoDB (historique)
-GET /api/kafka-kpis/history         — snapshots périodiques depuis MongoDB
+GET  /api/kafka-kpis/live            — snapshot global instantané
+WS   /api/kafka-kpis/ws             — stream temps réel (snapshot à chaque event)
+GET  /api/kafka-kpis/sessions        — toutes les sessions vues (in-memory)
+GET  /api/kafka-kpis/sessions/pending — sessions non encore uploadées
+GET  /api/kafka-kpis/operators       — stats complètes par opérateur (in-memory)
+GET  /api/kafka-kpis/operators/<op>  — stats d'un opérateur spécifique
+GET  /api/kafka-kpis/operators/db    — stats opérateurs depuis MongoDB (historique)
+GET  /api/kafka-kpis/history         — snapshots périodiques depuis MongoDB
 """
 
 import time
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient, DESCENDING, ASCENDING
+from pymongo import DESCENDING, ASCENDING
 import kafka_kpi_engine
+from db import get_col as _db_get_col
 
 kafka_kpis_bp = Blueprint("kafka_kpis", __name__)
 
 
+def register_ws_route(sock):
+    """Called from app.py to attach the KPI WebSocket route."""
+    import json
+
+    @sock.route("/api/kafka-kpis/ws")
+    def kafka_kpis_ws(ws):
+        # Send current snapshot immediately on connect
+        ws.send(json.dumps(kafka_kpi_engine.get_snapshot()))
+        kafka_kpi_engine.register_ws_client(ws)
+        try:
+            while True:
+                msg = ws.receive(timeout=30)
+                if msg is None:
+                    break
+        except Exception:
+            pass
+        finally:
+            kafka_kpi_engine.unregister_ws_client(ws)
+
+
 def _get_col(collection: str):
-    from config import MONGODB_URI
-    return MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)["physical_data"][collection]
+    return _db_get_col("physical_data", collection)
 
 
 # ── Live snapshot ─────────────────────────────────────────────────────────────

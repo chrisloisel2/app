@@ -1,14 +1,12 @@
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from bson import ObjectId
-from config import MONGODB_URI
 from kafka_consumer import get_state_snapshot
+from db import get_col as _db_col
 
 operateurs_bp = Blueprint("operateurs", __name__)
 
 def get_col():
-    client = MongoClient(MONGODB_URI)
-    return client["physical_data"]["operators"]
+    return _db_col("physical_data", "operators")
 
 
 @operateurs_bp.route("/api/operateurs", methods=["GET"])

@@ -2,17 +2,14 @@ import logging
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from config import MONGODB_URI
 
 logger = logging.getLogger(__name__)
 video_runs_bp = Blueprint("video_runs", __name__)
 
 DB_NAME = "physical_data"
-_mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-_col = _mongo[DB_NAME]["video_runs"]
+_col = _mongo_client["physical_data"]["video_runs"]
 
 QA_STATUSES = ("pending", "accepted", "rejected", "rework", None)
 ANN_STATUSES = ("pending", "in_progress", "completed", "failed", None)

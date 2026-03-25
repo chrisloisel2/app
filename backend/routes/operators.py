@@ -7,10 +7,9 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from config import MONGODB_URI
+from db import get_col as _db_col
 
 logger = logging.getLogger(__name__)
 operators_bp = Blueprint("operators", __name__)
@@ -22,8 +21,7 @@ STATUSES = ["active", "inactive", "left"]
 
 
 def _get_col():
-    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-    return client[DB_NAME]["operators"]
+    return _db_col(DB_NAME, "operators")
 
 
 def _ser(doc):

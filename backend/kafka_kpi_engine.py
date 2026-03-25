@@ -19,6 +19,7 @@ Collections MongoDB :
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -27,6 +28,38 @@ from datetime import datetime, timezone, date
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ── WebSocket client registry ─────────────────────────────────────────────────
+
+_ws_clients: set = set()
+_ws_clients_lock = threading.Lock()
+
+
+def register_ws_client(ws) -> None:
+    with _ws_clients_lock:
+        _ws_clients.add(ws)
+
+
+def unregister_ws_client(ws) -> None:
+    with _ws_clients_lock:
+        _ws_clients.discard(ws)
+
+
+def notify_kpi_ws() -> None:
+    """Push a fresh KPI snapshot to all connected WebSocket clients."""
+    try:
+        payload = json.dumps(get_snapshot())
+    except Exception as e:
+        logger.warning("notify_kpi_ws: serialization error — %s", e)
+        return
+    with _ws_clients_lock:
+        dead = set()
+        for ws in _ws_clients:
+            try:
+                ws.send(payload)
+            except Exception:
+                dead.add(ws)
+        _ws_clients.difference_update(dead)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -100,6 +133,11 @@ _stations: dict = {
 _event_counter: dict = defaultdict(int)
 _last_flush_ts: float = 0.0
 _flush_thread: threading.Thread | None = None
+
+# Total sessions historiques MongoDB (initialisé au démarrage, incrémenté à chaque nouvelle session)
+# Permet d'afficher un "total all-time" même après redémarrage du backend.
+# Protégé par _lock (le même que l'état principal).
+_total_sessions_all_time: int = 0
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -175,8 +213,12 @@ def on_event(msg: dict) -> None:
                       "session_integrity_error", "device_fault"):
         _schedule_flush(trigger=event_type)
 
+    # Push snapshot to all connected WebSocket clients
+    notify_kpi_ws()
 
-def _dispatch(event_type: str, msg: dict) -> None:
+
+def _dispatch(event_type: str, msg: dict) -> None:  # noqa: PLR0912
+    global _total_sessions_all_time
     station_id = str(msg.get("station_id", ""))
     ts = float(msg.get("ts", time.time()))
 
@@ -256,6 +298,9 @@ def _dispatch(event_type: str, msg: dict) -> None:
         # Persiste en Mongo (non-bloquant)
         _persist_session_async(_sessions[sid].copy())
         _persist_operator_stats_async(operator)
+
+        # Incrémente le compteur all-time (_lock déjà tenu par on_event)
+        _total_sessions_all_time += 1
 
     elif event_type == "session_failed":
         _recording["failed"] += 1
@@ -436,6 +481,8 @@ def _compute_snapshot() -> dict:
     pending_upload = sum(1 for s in all_sessions if s.get("upload_status") == "pending")
     uploaded       = sum(1 for s in all_sessions if s.get("upload_status") == "uploaded")
     total_dur_h    = round(sum(s.get("duration_s", 0) for s in all_sessions) / 3600, 2)
+    # Nombre total all-time (initialisé depuis MongoDB au démarrage + sessions en cours)
+    total_all_time = _total_sessions_all_time
 
     # Operator leaderboard (total sessions desc)
     op_leaderboard = sorted(
@@ -470,6 +517,7 @@ def _compute_snapshot() -> dict:
 
         "sessions": {
             "total_seen":         len(all_sessions),
+            "total_all_time":     total_all_time,
             "pending_upload":     pending_upload,
             "uploaded":           uploaded,
             "total_duration_h":   total_dur_h,
@@ -520,9 +568,8 @@ def _compute_snapshot() -> dict:
 # ── MongoDB persistence ───────────────────────────────────────────────────────
 
 def _get_col(collection: str):
-    from pymongo import MongoClient
-    from config import MONGODB_URI
-    return MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)["physical_data"][collection]
+    from db import get_col
+    return get_col("physical_data", collection)
 
 
 def _persist_session_async(session: dict) -> None:
@@ -609,6 +656,22 @@ def _periodic_flush_loop() -> None:
         _flush_to_mongo("periodic")
 
 
+def _init_total_sessions_from_db() -> None:
+    """
+    Compte les sessions MongoDB une seule fois au démarrage.
+    Ne bloque pas : s'exécute dans un thread daemon.
+    """
+    global _total_sessions_all_time
+    try:
+        col = _get_col(MONGO_SESSIONS_COL)
+        count = col.count_documents({})
+        with _lock:
+            _total_sessions_all_time = count
+        logger.info("kafka_kpi_engine: initialized total_sessions_all_time=%d from MongoDB", count)
+    except Exception as e:
+        logger.warning("kafka_kpi_engine: could not init total_sessions from DB — %s", e)
+
+
 def start_flush_thread() -> None:
     global _flush_thread
     if _flush_thread and _flush_thread.is_alive():
@@ -621,3 +684,10 @@ def start_flush_thread() -> None:
     _flush_thread.start()
     logger.info("kafka_kpi_engine: periodic flush thread started (interval=%ds)",
                 MONGO_FLUSH_INTERVAL)
+
+    # Init total sessions count from MongoDB in background
+    threading.Thread(
+        target=_init_total_sessions_from_db,
+        name="kafka-kpi-init-sessions-count",
+        daemon=True,
+    ).start()

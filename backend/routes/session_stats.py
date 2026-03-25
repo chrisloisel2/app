@@ -15,9 +15,10 @@ Routes de consultation :
 """
 
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timezone
 import re
+from db import get_col as _db_col
 
 session_stats_bp = Blueprint("session_stats", __name__)
 
@@ -29,8 +30,7 @@ _DATE2_RE = re.compile(r"session_(\d{4})(\d{2})(\d{2})")
 
 
 def _get_col():
-    from config import MONGODB_URI
-    return MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)["physical_data"][COLLECTION]
+    return _db_col("physical_data", COLLECTION)
 
 
 def _parse_session_date(session_id: str) -> dict:

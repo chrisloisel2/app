@@ -230,7 +230,7 @@ except Exception:
     sys.exit(1)
 
 try:
-    from routes.kafka_kpis import kafka_kpis_bp
+    from routes.kafka_kpis import kafka_kpis_bp, register_ws_route as register_kafka_kpis_ws
     logger.info("routes.kafka_kpis imported OK")
 except Exception:
     logger.critical("FAILED to import routes.kafka_kpis:\n%s", traceback.format_exc())
@@ -311,6 +311,7 @@ app.register_blueprint(session_stats_bp)
 from routes.salle import register_ws_route
 register_ws_route(sock)
 register_kafka_logs_ws(sock)
+register_kafka_kpis_ws(sock)
 
 logger.info("=== Blueprints registered — app ready ===")
 

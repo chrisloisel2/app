@@ -3,10 +3,9 @@ import logging
 from bson import ObjectId
 from bson.errors import InvalidId
 from flask import Blueprint, jsonify, request
-from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from config import MONGODB_URI
+from db import get_col as _db_col
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +13,7 @@ annotateurs_bp = Blueprint("annotateurs", __name__)
 
 
 def _get_col():
-    client = MongoClient(MONGODB_URI)
-    return client["physical_data"]["annotators"]
+    return _db_col("physical_data", "annotators")
 
 
 def _ok(data=None, status=200):
