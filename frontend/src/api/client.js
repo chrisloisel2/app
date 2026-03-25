@@ -43,9 +43,14 @@ export const fetchSessionStats  = (params)       => api.get("/api/session-stats"
 export const fetchSessionCharts = (params)       => api.get("/api/session-stats/charts", { params });
 
 // ── KPIs temps réel (Kafka) ────────────────────────────────────────────────────
-export const fetchKafkaKpisLive    = ()                      => api.get("/api/kafka-kpis/live");
-export const fetchKafkaKpisHistory = (hours = 24, limit = 100) =>
-  api.get("/api/kafka-kpis/history", { params: { hours, limit } });
+export const fetchKafkaKpisLive       = ()                         => api.get("/api/kafka-kpis/live");
+export const fetchKafkaKpisHistory    = (hours = 24, limit = 100)  => api.get("/api/kafka-kpis/history", { params: { hours, limit } });
+export const fetchKafkaSessions       = (params)                   => api.get("/api/kafka-kpis/sessions", { params });
+export const fetchKafkaSessionsPending= ()                         => api.get("/api/kafka-kpis/sessions/pending");
+export const fetchKafkaSessionsDb     = (params)                   => api.get("/api/kafka-kpis/sessions/db", { params });
+export const fetchKafkaOperators      = ()                         => api.get("/api/kafka-kpis/operators");
+export const fetchKafkaOperatorDetail = (op)                       => api.get(`/api/kafka-kpis/operators/${op}`);
+export const fetchKafkaOperatorsDb    = (params)                   => api.get("/api/kafka-kpis/operators/db", { params });
 
 // ── Operators (physical_data) ─────────────────────────────────────────────────
 export const fetchOperators  = (params)     => api.get("/api/operators", { params });

@@ -4,7 +4,6 @@ import DashboardPage from "./pages/DashboardPage";
 import KPIsPage from "./pages/KPIsPage";
 import SalleRecoltePage from "./pages/SalleRecoltePage";
 import OrchestrateurPage from "./pages/OrchestrateurPage";
-import OperateursPage from "./pages/OperateursPage";
 import AnnotateursPage from "./pages/AnnotateursPage";
 import ScenariosPage from "./pages/ScenariosPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -23,6 +22,7 @@ import KpiAggregatesPage from "./pages/KpiAggregatesPage";
 import PlanningPage from "./pages/PlanningPage";
 import OperatorsPage from "./pages/OperatorsPage";
 import SessionChartsPage from "./pages/SessionChartsPage";
+import KafkaKpisPage from "./pages/KafkaKpisPage";
 
 export default function App() {
   return (
@@ -37,8 +37,7 @@ export default function App() {
               <Route path="/kpis/:section"          element={<KPIsPage />} />
               <Route path="/salle-recolte"          element={<SalleRecoltePage />} />
               <Route path="/orchestrateur"          element={<OrchestrateurPage />} />
-              {/* Administration legacy */}
-              <Route path="/operateurs"             element={<OperateursPage />} />
+              {/* Administration */}
               <Route path="/annotateurs"            element={<AnnotateursPage />} />
               <Route path="/scenarios"              element={<ScenariosPage />} />
               {/* Nouvelle base de données physical_data */}
@@ -58,6 +57,7 @@ export default function App() {
               <Route path="/planning"               element={<PlanningPage />} />
               <Route path="/operators"              element={<OperatorsPage />} />
               <Route path="/session-charts"         element={<SessionChartsPage />} />
+              <Route path="/kafka-kpis"             element={<KafkaKpisPage />} />
             </Routes>
           </main>
         </div>

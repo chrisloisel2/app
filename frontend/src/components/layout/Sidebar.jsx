@@ -58,6 +58,14 @@ export default function Sidebar() {
         <div>
           {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Production</p>}
           <NavLink
+            to="/kafka-kpis"
+            title="KPIs Live"
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mb-0.5`}
+          >
+            <span className="shrink-0 text-base">⚡</span>
+            {expanded && <span className="whitespace-nowrap">KPIs Live</span>}
+          </NavLink>
+          <NavLink
             to="/session-charts"
             title="Sessions"
             className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive} mb-0.5`}
@@ -125,7 +133,6 @@ export default function Sidebar() {
         <div>
           {expanded && <p className="px-2 text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1.5">Administration</p>}
           {[
-            { to: "/operateurs",  label: "Opérateurs",  icon: "◉" },
             { to: "/annotateurs", label: "Annotateurs", icon: "◎" },
             { to: "/scenarios",   label: "Scénarios",   icon: "◈" },
           ].map(({ to, label, icon }) => (

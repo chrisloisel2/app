@@ -82,7 +82,7 @@ def get_operator(rid):
 def create_operator():
     col = _get_col()
     body = request.get_json() or {}
-    required = ["_id", "full_name", "role", "site_id", "status"]
+    required = ["_id", "full_name", "role", "site_id", "status", "username", "password"]
     for f in required:
         if not body.get(f):
             return _err(f"Champ requis : {f}")
@@ -95,11 +95,11 @@ def create_operator():
         "_id": body["_id"],
         "employee_code": body.get("employee_code") or None,
         "full_name": body["full_name"],
+        "username": body["username"],
+        "password": body["password"],
         "role": body["role"],
         "site_id": body["site_id"],
-        "skills": body.get("skills") or [],
-        "hire_date": None,
-        "autonomous_at": None,
+        "rig_id": body.get("rig_id") or None,
         "status": body["status"],
         "cost_profile": body.get("cost_profile") or {},
     }
@@ -118,7 +118,7 @@ def update_operator(rid):
     col = _get_col()
     body = request.get_json() or {}
     upd = {}
-    for field in ["full_name", "role", "site_id", "status", "employee_code", "skills", "cost_profile"]:
+    for field in ["full_name", "role", "site_id", "status", "employee_code", "username", "password", "rig_id", "cost_profile"]:
         if field in body:
             upd[field] = body[field]
     if "role" in upd and upd["role"] not in ROLES:

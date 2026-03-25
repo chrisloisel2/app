@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { fetchOperators, createOperator, updateOperator, deleteOperator } from "../api/client";
+import { fetchOperators, createOperator, updateOperator, deleteOperator, fetchRigs } from "../api/client";
 
 const ROLES = ["capture_operator", "annotator", "auditor", "qa", "supervisor", "other"];
 const STATUSES = ["active", "inactive", "left"];
@@ -20,8 +20,8 @@ const STATUS_BADGE = {
 
 const EMPTY = {
   _id: "", employee_code: "", full_name: "", role: "capture_operator",
-  site_id: "", status: "active",
-  skills: "",
+  site_id: "", status: "active", rig_id: "",
+  username: "", password: "",
   cost_profile: { hourly_cost: "", currency: "EUR" },
 };
 
@@ -38,6 +38,22 @@ export default function OperatorsPage() {
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Rigs list for dropdowns
+  const [rigs, setRigs] = useState([]);
+  const [sites, setSites] = useState([]);
+
+  useEffect(() => {
+    fetchRigs({})
+      .then((r) => {
+        const rigList = r.data ?? [];
+        setRigs(rigList);
+        // Extract unique site_ids
+        const uniqueSites = [...new Set(rigList.map((rig) => rig.site_id).filter(Boolean))].sort();
+        setSites(uniqueSites);
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -62,7 +78,9 @@ export default function OperatorsPage() {
       role: item.role ?? "capture_operator",
       site_id: item.site_id ?? "",
       status: item.status ?? "active",
-      skills: (item.skills ?? []).join(", "),
+      rig_id: item.rig_id ?? "",
+      username: item.username ?? "",
+      password: "",
       cost_profile: { hourly_cost: item.cost_profile?.hourly_cost ?? "", currency: item.cost_profile?.currency ?? "EUR" },
     });
     setFormError(null); setModalOpen(true);
@@ -73,14 +91,9 @@ export default function OperatorsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true); setFormError(null);
     try {
-      const payload = {
-        ...form,
-        skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
-        cost_profile: {
-          hourly_cost: form.cost_profile.hourly_cost !== "" ? Number(form.cost_profile.hourly_cost) : null,
-          currency: form.cost_profile.currency,
-        },
-      };
+      const payload = { ...form };
+      // Don't send empty password on edit
+      if (editTarget && !payload.password) delete payload.password;
       if (editTarget) { await updateOperator(editTarget._id, payload); }
       else { await createOperator(payload); }
       setModalOpen(false); load();
@@ -98,6 +111,10 @@ export default function OperatorsPage() {
     : <span className="text-xs text-gray-400">—</span>;
 
   const cls = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+  // Rigs filtered by selected site in form
+  const rigsForSite = rigs.filter((r) => !form.site_id || r.site_id === form.site_id);
 
   return (
     <div className="p-6 space-y-6">
@@ -118,9 +135,10 @@ export default function OperatorsPage() {
           <option value="">Tous les statuts</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <input value={filters.site_id} onChange={(e) => setFilter("site_id", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Site ID" />
+        <select value={filters.site_id} onChange={(e) => setFilter("site_id", e.target.value)} className={cls}>
+          <option value="">Tous les sites</option>
+          {sites.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>}
@@ -131,7 +149,7 @@ export default function OperatorsPage() {
           : (
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>{["ID", "Nom", "Code", "Rôle", "Site", "Statut", "Coût/h", "Skills", "Actions"].map((h) => (
+                <tr>{["ID", "Nom", "Code", "Username", "Rôle", "Site", "Rack", "Statut", "Coût/h", "Actions"].map((h) => (
                   <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}</tr>
               </thead>
@@ -141,11 +159,12 @@ export default function OperatorsPage() {
                     <td className="px-3 py-2 font-mono text-gray-500 text-xs">{item._id}</td>
                     <td className="px-3 py-2 font-medium text-gray-900">{item.full_name}</td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{item.employee_code ?? "—"}</td>
+                    <td className="px-3 py-2 text-gray-600 text-xs">{item.username ?? "—"}</td>
                     <td className="px-3 py-2">{badge(item.role, ROLE_BADGE)}</td>
-                    <td className="px-3 py-2 text-gray-600 text-xs">{item.site_id}</td>
+                    <td className="px-3 py-2 text-gray-600 text-xs">{item.site_id || "—"}</td>
+                    <td className="px-3 py-2 text-gray-600 text-xs">{item.rig_id || "—"}</td>
                     <td className="px-3 py-2">{badge(item.status, STATUS_BADGE)}</td>
                     <td className="px-3 py-2 text-gray-600 text-xs">{item.cost_profile?.hourly_cost != null ? `${item.cost_profile.hourly_cost} ${item.cost_profile.currency ?? ""}` : "—"}</td>
-                    <td className="px-3 py-2 text-gray-500 text-xs max-w-[150px] truncate">{(item.skills ?? []).join(", ") || "—"}</td>
                     <td className="px-3 py-2 text-right space-x-2 whitespace-nowrap">
                       <button onClick={() => openEdit(item)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">Modifier</button>
                       <button onClick={() => setDeleteTarget(item)} className="text-red-500 hover:text-red-700 text-xs font-medium">Supprimer</button>
@@ -173,66 +192,90 @@ export default function OperatorsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">ID <span className="text-red-500">*</span></label>
                   <input value={form._id} onChange={(e) => set("_id", e.target.value)} disabled={!!editTarget}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                    className={`${inputCls} disabled:bg-gray-50`}
                     placeholder="op_001" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Code employé</label>
                   <input value={form.employee_code} onChange={(e) => set("employee_code", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="EMP-001" />
+                    className={inputCls} placeholder="EMP-001" />
                 </div>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nom complet <span className="text-red-500">*</span></label>
                 <input value={form.full_name} onChange={(e) => set("full_name", e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Jean Martin" required />
+                  className={inputCls} placeholder="Jean Martin" required />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Username <span className="text-red-500">*</span></label>
+                  <input value={form.username} onChange={(e) => set("username", e.target.value)}
+                    className={inputCls} placeholder="jmartin" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Mot de passe {!editTarget && <span className="text-red-500">*</span>}
+                    {editTarget && <span className="text-gray-400 text-xs font-normal"> (laisser vide = inchangé)</span>}
+                  </label>
+                  <input type="password" value={form.password} onChange={(e) => set("password", e.target.value)}
+                    className={inputCls} placeholder={editTarget ? "••••••••" : ""}
+                    required={!editTarget} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Rôle <span className="text-red-500">*</span></label>
-                  <select value={form.role} onChange={(e) => set("role", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select value={form.role} onChange={(e) => set("role", e.target.value)} className={inputCls}>
                     {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Site <span className="text-red-500">*</span></label>
-                  <input value={form.site_id} onChange={(e) => set("site_id", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="site_paris" required />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
-                  <select value={form.status} onChange={(e) => set("status", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select value={form.status} onChange={(e) => set("status", e.target.value)} className={inputCls}>
                     {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Skills (séparés par virgule)</label>
-                <input value={form.skills} onChange={(e) => set("skills", e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="capture, reset, basic_qa" />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Site <span className="text-red-500">*</span></label>
+                  <select value={form.site_id}
+                    onChange={(e) => { set("site_id", e.target.value); set("rig_id", ""); }}
+                    className={inputCls} required>
+                    <option value="">— Choisir un site —</option>
+                    {sites.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Rack assigné</label>
+                  <select value={form.rig_id} onChange={(e) => set("rig_id", e.target.value)} className={inputCls}>
+                    <option value="">— Aucun rack —</option>
+                    {rigsForSite.map((r) => (
+                      <option key={r._id} value={r._id}>{r.code ?? r._id}{r.label ? ` — ${r.label}` : ""}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Coût horaire</label>
                   <input type="number" step="0.01" value={form.cost_profile.hourly_cost}
                     onChange={(e) => setForm((f) => ({ ...f, cost_profile: { ...f.cost_profile, hourly_cost: e.target.value } }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="18.50" />
+                    className={inputCls} placeholder="18.50" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Devise</label>
                   <input value={form.cost_profile.currency}
                     onChange={(e) => setForm((f) => ({ ...f, cost_profile: { ...f.cost_profile, currency: e.target.value } }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="EUR" />
+                    className={inputCls} placeholder="EUR" />
                 </div>
               </div>
+
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm text-gray-600 font-medium">Annuler</button>
                 <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
