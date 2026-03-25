@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 from pymongo.errors import PyMongoError
+from db import mongo as _mongo_client
 
 
 logger = logging.getLogger(__name__)

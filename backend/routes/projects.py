@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from bson.errors import InvalidId
 from flask import Blueprint, jsonify, request
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from db import mongo as _mongo_client
 
 
 logger = logging.getLogger(__name__)
